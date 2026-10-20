@@ -1,0 +1,83 @@
+name: daily-checkin-platform
+
+services:
+  checkin-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    # 可通过环境变量覆盖镜像名 / 容器名，便于并行运行验证环境。
+    image: ${IMAGE_NAME:-daily-checkin-platform:latest}
+    container_name: ${CONTAINER_NAME:-daily-checkin-platform}
+    restart: unless-stopped
+    ports:
+      # APP_BIND 默认监听所有网卡；使用反向代理时建议改为 127.0.0.1。
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-5000}:5000"
+    volumes:
+      # 宿主机路径可通过环境变量覆盖，默认仍与原配置一致。
+      - "${DATA_DIR_HOST:-./data}:/app/data"
+      - "${MODULES_DIR_HOST:-./modules}:/app/modules"
+      - "${LOGS_DIR_HOST:-./logs}:/app/logs"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      TIMEZONE: ${TIMEZONE:-Asia/Shanghai}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS: ${ADMIN_PASS:-admin123}
+      # 留空时自动生成并持久化到 ./data/.secret_key。
+      # 一旦设置，请长期保持一致（或沿用已生成的密钥），否则旧参数无法解密。
+      SECRET_KEY: ${SECRET_KEY:-}
+      MODULE_TIMEOUT: ${MODULE_TIMEOUT:-300}
+      ACCOUNT_INTERVAL_MIN_SECONDS: ${ACCOUNT_INTERVAL_MIN_SECONDS:-120}
+      ACCOUNT_INTERVAL_MAX_SECONDS: ${ACCOUNT_INTERVAL_MAX_SECONDS:-300}
+      SCHEDULE_MIN_LEAD_SECONDS: ${SCHEDULE_MIN_LEAD_SECONDS:-5}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-31}
+      LOG_MAX_CHARS: ${LOG_MAX_CHARS:-512000}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-10}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      PUID: ${PUID:-10001}
+      PGID: ${PGID:-10001}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CSRF_ENABLED: ${CSRF_ENABLED:-true}
+      PUSH_SKIP_NOTICE: ${PUSH_SKIP_NOTICE:-true}
+      PUSH_AFTER_FLUSH_MODE: ${PUSH_AFTER_FLUSH_MODE:-single}
+      PUSH_MAX_WAIT_MINUTES: ${PUSH_MAX_WAIT_MINUTES:-60}
+      PUSH_RETRY_ATTEMPTS: ${PUSH_RETRY_ATTEMPTS:-3}
+      PUSH_RETRY_BASE_SECONDS: ${PUSH_RETRY_BASE_SECONDS:-1.0}
+      PUSH_DRIVER_MAX_VERSIONS: ${PUSH_DRIVER_MAX_VERSIONS:-5}
+      PUSH_HTTP_TIMEOUT_SECONDS: ${PUSH_HTTP_TIMEOUT_SECONDS:-10}
+      PUSH_CONNECT_TIMEOUT_SECONDS: ${PUSH_CONNECT_TIMEOUT_SECONDS:-5}
+      PUSH_REQUEST_RETRY_SECONDS: ${PUSH_REQUEST_RETRY_SECONDS:-0.8}
+      PUSH_RESPONSE_MAX_CHARS: ${PUSH_RESPONSE_MAX_CHARS:-4000}
+      RING_LOG_MAX_ROWS: ${RING_LOG_MAX_ROWS:-200000}
+      RING_LOG_MAX_BYTES: ${RING_LOG_MAX_BYTES:-134217728}
+      RING_SYSTEM_MAX_ROWS: ${RING_SYSTEM_MAX_ROWS:-50000}
+      RING_SYSTEM_MAX_BYTES: ${RING_SYSTEM_MAX_BYTES:-33554432}
+      RING_MODULE_MAX_ROWS: ${RING_MODULE_MAX_ROWS:-20000}
+      RING_MODULE_MAX_BYTES: ${RING_MODULE_MAX_BYTES:-16777216}
+      RING_PUSH_MAX_ROWS: ${RING_PUSH_MAX_ROWS:-50000}
+      RING_PUSH_MAX_BYTES: ${RING_PUSH_MAX_BYTES:-33554432}
+      RING_TRIM_BATCH_SIZE: ${RING_TRIM_BATCH_SIZE:-1000}
+      RING_QUEUE_MAX: ${RING_QUEUE_MAX:-10000}
+      RING_BUSY_TIMEOUT_SECONDS: ${RING_BUSY_TIMEOUT_SECONDS:-15}
+      RING_WRITE_RETRIES: ${RING_WRITE_RETRIES:-6}
+      RING_TRIM_MAX_LOOPS: ${RING_TRIM_MAX_LOOPS:-10000}
+      SSE_KEEPALIVE_SECONDS: ${SSE_KEEPALIVE_SECONDS:-15}
+      SSE_QUEUE_MAX: ${SSE_QUEUE_MAX:-2000}
+      # 可选：自定义数据库 URL（需自行安装对应的异步驱动；默认使用 SQLite）。
+      DATABASE_URL: ${DATABASE_URL:-}
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
