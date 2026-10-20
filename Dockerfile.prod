@@ -32,12 +32,15 @@ COPY docker-entrypoint.py /usr/local/bin/docker-entrypoint.py
 
 RUN mkdir -p /app/data /app/logs /app/modules /app/app/push_drivers/custom \
     && chmod 700 /app/data /app/logs \
-    && chmod 755 /usr/local/bin/docker-entrypoint.py
+    && chmod 755 /usr/local/bin/docker-entrypoint.py \
+    && chmod -R a+rX /app/app /app/static /app/templates /app/modules
 
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3).status == 200 else 1)"
 
+# No USER instruction here: the entrypoint starts as root only to fix
+# bind-mount ownership, then drops to PUID/PGID before exec'ing uvicorn.
 ENTRYPOINT ["python", "/usr/local/bin/docker-entrypoint.py"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
