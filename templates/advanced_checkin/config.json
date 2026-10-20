@@ -1,0 +1,74 @@
+{
+  "name": "Acme 签到（进阶多账号模板）",
+  "description": "生产级多账号模块骨架：平台负责账号串行、随机时间与统一推送；单个 run(params) 专注 Cookie 过期检测、自动重新登录、指数退避重试和超时控制。默认模拟模式，无网络也能安全试跑。",
+  "author": "Daily Check-in Platform",
+  "version": "2.0.0",
+  "icon": "🛰️",
+  "default_start_time": "09:00",
+  "default_end_time": "11:00",
+  "default_repeat_cycle": "daily",
+  "default_repeat_sub_value": "",
+  "multi_account": true,
+  "params": [
+    {
+      "key": "api_base",
+      "label": "API 根地址",
+      "type": "text",
+      "default": "https://api.example.com",
+      "placeholder": "https://api.example.com",
+      "help": "仅真实模式使用。请同时根据目标平台修改 main.py 中的接口路径与字段映射。"
+    },
+    {
+      "key": "account",
+      "label": "账号",
+      "type": "text",
+      "required": false,
+      "account_label": true,
+      "placeholder": "账号 / 邮箱 / 手机号",
+      "help": "作为账号标识自动脱敏展示，也用于 Cookie 失效后重新登录。"
+    },
+    {
+      "key": "password",
+      "label": "密码",
+      "type": "password",
+      "required": false,
+      "sensitive": true,
+      "placeholder": "账号密码"
+    },
+    {
+      "key": "cookie",
+      "label": "Cookie",
+      "type": "textarea",
+      "required": false,
+      "rows": 4,
+      "sensitive": true,
+      "placeholder": "可选，优先使用已有登录态",
+      "help": "检测到 401 / 403 或业务登录失效时，会使用账号密码重新登录一次。"
+    },
+    {
+      "key": "max_retries",
+      "label": "最大尝试次数",
+      "type": "number",
+      "default": 2,
+      "min": 1,
+      "max": 5,
+      "step": 1
+    },
+    {
+      "key": "request_timeout",
+      "label": "请求超时（秒）",
+      "type": "number",
+      "default": 20,
+      "min": 5,
+      "max": 60,
+      "step": 1
+    },
+    {
+      "key": "simulate",
+      "label": "模拟模式",
+      "type": "switch",
+      "default": true,
+      "help": "开启时使用内置 MockTransport，不会访问网络，用于验证完整流程。"
+    }
+  ]
+}
