@@ -4,7 +4,7 @@ FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="Daily Check-in Platform" \
       org.opencontainers.image.description="Self-hosted daily check-in platform" \
-      org.opencontainers.image.version="1.0.0-rc.2"
+      org.opencontainers.image.version="1.0.1"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

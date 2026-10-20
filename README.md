@@ -1,14 +1,15 @@
 # 签到云台 · Daily Check-in Platform
 
-> ## v1.0.0-rc.2 Release Candidate
+> ## v1.0.1 Release
 >
 > 本版本为第六轮迭代技术债清零后的封版候选。**生产部署前必须在目标架构机器上执行 `bash verify_docker.sh`
 > 并通过全部检查项，方可将 Tag 晋升为 `v1.0.0` 正式版。**
 >
-> - 发布说明：[docs/RELEASE_NOTES_v1.0.0-rc.2.md](docs/RELEASE_NOTES_v1.0.0-rc.2.md)
+> - 发布说明：[docs/RELEASE_NOTES_v1.0.1.md](docs/RELEASE_NOTES_v1.0.1.md)
 > > > - 完整变更：[docs/ITERATION6_CHANGES.md](docs/ITERATION6_CHANGES.md)
 > - 发布与变更管制：[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md)
 - Docker 实机门禁 SOP：[docs/DOCKER_GATE_SOP.md](docs/DOCKER_GATE_SOP.md)
+- 开发者模式与手动测试：[docs/DEVELOPER_MODE.md](docs/DEVELOPER_MODE.md)
 >
 > Docker 实机验证未通过前，不得切换生产流量。
 
