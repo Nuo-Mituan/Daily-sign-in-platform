@@ -1,9 +1,4 @@
-# Docker 实机门禁执行 SOP（v1.0.0-rc.2）
-
-> **生产包说明：**本 `upgit/` 为生产运行时包，按发布隔离规则不包含 `backend/tests`、
-> `requirements-dev.txt` 与 `pytest.ini`。完整 61 项技术债回归必须在源码 Release Tag
-> （含 tests）执行；本包内 `verify_docker.sh` 会检测 tests 是否存在并相应跳过容器内 pytest。
-
+# Docker 实机门禁执行 SOP（v1.0.1）
 
 > 目标：在目标 Linux 宿主机上完成镜像构建、非 root 运行、容器内全量测试、API 验证与网络/SSE 压测，全部通过后方可创建 `v1.0.0`。
 
@@ -81,7 +76,7 @@ docker compose exec -T \
 判定：
 
 - Exit Code **0**；
-- 输出 **60 passed**（或不少于 60，且无 failed/skipped 关键项）。
+- 输出 **63 passed**（或不少于 60，且无 failed/skipped 关键项）。
 
 ## 5. 非 root 与权限检查
 
@@ -117,8 +112,6 @@ bash verify_docker.sh
 
 ## 7. 网络与 SSE 重连压测
 
-> 网络压测脚本不从生产运行包提供；请从源码 Release Tag（含 `scripts/`）检出后，在宿主机执行：
-
 在宿主机 Python 3.11+ 环境执行（推荐独立 venv）：
 
 ```bash
@@ -129,17 +122,17 @@ pip install -r backend/requirements-dev.txt
 set -a
 source .env
 set +a
-python /path/to/source/scripts/benchmark_rc2_network.py \
+python scripts/benchmark_rc2_network.py \
   --base-url "http://127.0.0.1:5000/api" \
   --user "$ADMIN_USER" \
   --password "$ADMIN_PASS" \
   --output docs/perf/rc2-after.json
 ```
 
-或从源码目录执行到本容器（脚本不复制进生产包）：
+或容器内执行：
 
 ```bash
-docker compose cp /path/to/source/scripts/benchmark_rc2_network.py \
+docker compose cp scripts/benchmark_rc2_network.py \
   checkin-platform:/tmp/benchmark_rc2_network.py
 docker compose exec -T checkin-platform python /tmp/benchmark_rc2_network.py \
   --base-url http://127.0.0.1:5000/api \
@@ -193,7 +186,7 @@ PY
 全部满足：
 
 - [ ] `verify_docker.sh` Exit 0；
-- [ ] 容器内 pytest ≥60 passed；
+- [ ] 容器内 pytest ≥63 passed；
 - [ ] 非 root UID / 700 / 600；
 - [ ] API 验证全部 PASS；
 - [ ] 网络压测全部达标；

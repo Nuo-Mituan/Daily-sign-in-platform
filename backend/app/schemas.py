@@ -18,6 +18,7 @@ class UserOut(BaseModel):
 
     id: int
     username: str
+    developer_mode_enabled: bool = False
     created_at: datetime
 
 
@@ -29,6 +30,14 @@ class LoginResponse(BaseModel):
 
 class SessionResponse(LoginResponse):
     pass
+
+
+class DeveloperModeOut(BaseModel):
+    enabled: bool
+
+
+class DeveloperModeUpdate(BaseModel):
+    enabled: bool
 
 
 class ChangePasswordRequest(BaseModel):

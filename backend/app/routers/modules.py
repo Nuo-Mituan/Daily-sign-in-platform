@@ -734,6 +734,26 @@ async def run_module_now(
     return RunResponse(log_id=log_id)
 
 
+@router.post("/{module_id}/test", response_model=RunResponse, summary="开发者模式下执行一次测试")
+async def test_module_now(
+    module_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RunResponse:
+    await _get_module_or_404(db, module_id)
+    try:
+        log_id = await execution.launch_test_execution(module_id, current_user.id)
+    except execution.DeveloperModeDisabledError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except execution.ExecutionBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except execution.ExecutionRejectedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except execution.ExecutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RunResponse(log_id=log_id, message="测试执行已触发，请查看执行日志")
+
+
 @router.delete("/{module_id}", response_model=MessageResponse, summary="删除模块")
 async def delete_module(
     module_id: int,

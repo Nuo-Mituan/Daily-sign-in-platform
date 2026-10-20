@@ -21,7 +21,7 @@
 
 ## 实机门禁资产
 
-- 网络/SSE 压测脚本：由源码 Release Tag 的 `scripts/benchmark_rc2_network.py` 提供（生产运行包按隔离规则不包含 benchmark 脚本）
+- 网络/SSE 压测脚本：`scripts/benchmark_rc2_network.py`
 - 实机门禁 SOP：`docs/DOCKER_GATE_SOP.md`
 - 容器内全量测试：`docker compose exec ... pytest backend/tests -q`
 

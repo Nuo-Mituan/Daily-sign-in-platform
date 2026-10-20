@@ -21,6 +21,7 @@ from ..models import (
     STATUS_SUCCESS,
     TRIGGER_MANUAL,
     TRIGGER_SCHEDULE,
+    TRIGGER_TEST,
     ExecutionLog,
     Module,
 )
@@ -37,6 +38,7 @@ from ..module_loader import (
 )
 from ..timeutils import utcnow
 from .ownership import owner_user_id
+from .preferences import developer_mode_enabled
 from .redaction import collect_sensitive_values, redact_text, sensitive_values
 from .capture import OutputCapture, capture_output
 from .hub import hub
@@ -52,6 +54,10 @@ _background_tasks: set[asyncio.Task] = set()
 
 class ExecutionError(RuntimeError):
     pass
+
+
+class DeveloperModeDisabledError(ExecutionError):
+    """Raised when a test execution is attempted without developer mode."""
 
 
 class ExecutionBusyError(ExecutionError):
@@ -135,7 +141,7 @@ async def _create_log(module: Module, trigger: str) -> ExecutionLog:
     log = ExecutionLog(
         module_id=module.id,
         module_key=module.key,
-        module_name=module.name,
+        module_name=f"[TEST] {module.name}" if trigger == TRIGGER_TEST else module.name,
         trigger=trigger,
         status=STATUS_RUNNING,
         started_at=now,
@@ -147,6 +153,18 @@ async def _create_log(module: Module, trigger: str) -> ExecutionLog:
 
 async def launch_manual_execution(module_id: int) -> int:
     """Start a manual run in the background and return the execution log id."""
+    return await _launch_execution(module_id, TRIGGER_MANUAL)
+
+
+async def launch_test_execution(module_id: int, user_id: int) -> int:
+    """Start a developer-mode test run; permission is enforced server-side."""
+    async with SessionLocal() as db:
+        if not await developer_mode_enabled(db, user_id):
+            raise DeveloperModeDisabledError("请先在设置中开启开发者选项")
+    return await _launch_execution(module_id, TRIGGER_TEST)
+
+
+async def _launch_execution(module_id: int, trigger: str) -> int:
     lock = _lock_for(module_id)
     if lock.locked():
         raise ExecutionBusyError("该模块正在执行中，请等待本次执行结束")
@@ -161,7 +179,7 @@ async def launch_manual_execution(module_id: int) -> int:
                 raise ExecutionRejectedError(
                     f"模块当前不可执行：{module.load_error}。请修复模块文件后重新扫描。"
                 )
-            log = await _create_log(module, TRIGGER_MANUAL)
+            log = await _create_log(module, trigger)
             db.add(log)
             await db.commit()
             await db.refresh(log)
@@ -170,7 +188,7 @@ async def launch_manual_execution(module_id: int) -> int:
 
         hub.begin(log_id)
         task = asyncio.create_task(
-            _execute(module_id, log_id, started_at, TRIGGER_MANUAL, module.key)
+            _execute(module_id, log_id, started_at, trigger, module.key)
         )
         _track_task(task)
         handed_off = True
@@ -364,7 +382,11 @@ async def _load_execution_module(
 def _write_execution_header(
     module_name: str, trigger: str, capture: OutputCapture
 ) -> None:
-    trigger_label = "手动执行" if trigger == TRIGGER_MANUAL else "定时执行"
+    trigger_label = {
+        TRIGGER_MANUAL: "手动执行",
+        TRIGGER_SCHEDULE: "定时执行",
+        TRIGGER_TEST: "手动测试",
+    }.get(trigger, "执行")
     capture.writeline("=" * 68)
     capture.writeline(f"{module_name}  ·  {trigger_label}")
     capture.writeline(
@@ -603,6 +625,12 @@ async def _send_execution_notification(
             push_unified = bool(module.push_unified)
             push_independent = bool(module.push_independent)
             legacy_enabled = bool(module.push_enabled)
+        if trigger == TRIGGER_TEST:
+            payload["result"] = f"[测试推送] {payload['result']}"
+            payload["summary"] = f"[测试推送] {payload['summary']}"
+            payload["details"] = f"[测试推送]\n{payload['details']}"
+            await send_independent_module(module_id, **payload, trigger=trigger)
+            return
         if push_unified:
             if push_independent:
                 logger.info("模块 %s 同时开启两种推送，统一推送优先", module_id)

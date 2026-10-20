@@ -72,3 +72,4 @@ bash verify_docker.sh
 
 ## 5. 技术债
 
+`docs/TECH_DEBT.md` 纳入 Iteration 7 规划输入。P2 项（TD-01/02/03/05/06）须在第七轮首周完成评估与排期。

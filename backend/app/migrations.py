@@ -70,6 +70,14 @@ async def migrate_schema() -> None:
         if added:
             logger.info("数据库迁移：为 modules 添加字段 %s", ", ".join(added))
 
+        result = await connection.exec_driver_sql("PRAGMA table_info(users)")
+        user_columns = {row[1] for row in result.fetchall()}
+        if user_columns and "developer_mode_enabled" not in user_columns:
+            await connection.exec_driver_sql(
+                "ALTER TABLE users ADD COLUMN developer_mode_enabled BOOLEAN NOT NULL DEFAULT 0"
+            )
+            logger.info("数据库迁移：为 users 添加 developer_mode_enabled")
+
         # Push tables were introduced in the same release line; add columns
         # for databases that already have them from an earlier RC build.
         for table, columns in (

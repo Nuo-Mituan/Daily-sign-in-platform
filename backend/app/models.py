@@ -54,6 +54,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    developer_mode_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, onupdate=utcnow
@@ -181,6 +184,7 @@ STATUS_FAILED = "failed"
 
 TRIGGER_MANUAL = "manual"
 TRIGGER_SCHEDULE = "schedule"
+TRIGGER_TEST = "test"
 
 
 class ModuleSchedule(Base):

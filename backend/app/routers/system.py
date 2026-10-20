@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import settings
+from ..database import SessionLocal
 from ..deps import get_current_user
 from ..schemas import (
     HealthOut,
     LogSettingsOut,
     LogSettingsUpdate,
     LogSettingsUpdateOut,
+    DeveloperModeOut,
+    DeveloperModeUpdate,
     MetaOut,
     RuntimeMetricsOut,
     SystemLogOut,
@@ -22,6 +25,7 @@ from ..scheduling import CYCLE_LABELS, REPEAT_CYCLES
 from ..services.maintenance import purge_old_logs
 from ..services.ring_log import ring_log
 from ..services.push_outbox import pending_count as outbox_pending_count
+from ..services.preferences import set_developer_mode
 from ..services.hub import hub
 from ..services.scheduler import scheduler_service
 from ..timeutils import utcnow
@@ -84,6 +88,29 @@ def _log_settings() -> LogSettingsOut:
 @settings_router.get("/logs", response_model=LogSettingsOut, summary="读取日志保留设置")
 async def get_log_settings() -> LogSettingsOut:
     return _log_settings()
+
+
+@settings_router.get(
+    "/developer", response_model=DeveloperModeOut, summary="读取开发者模式"
+)
+async def get_developer_mode(
+    current_user=Depends(get_current_user),
+) -> DeveloperModeOut:
+    return DeveloperModeOut(enabled=bool(current_user.developer_mode_enabled))
+
+
+@settings_router.put(
+    "/developer", response_model=DeveloperModeOut, summary="开启或关闭开发者模式"
+)
+async def update_developer_mode(
+    payload: DeveloperModeUpdate,
+    current_user=Depends(get_current_user),
+) -> DeveloperModeOut:
+    async with SessionLocal() as db:
+        updated = await set_developer_mode(db, current_user.id, payload.enabled)
+    if not updated:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return DeveloperModeOut(enabled=payload.enabled)
 
 
 @settings_router.put(
