@@ -1,15 +1,18 @@
 # 签到云台 · Daily Check-in Platform
 
-> ## v1.0.1 Release
+> ## v1.0.2 Release
 >
 > 本版本为第六轮迭代技术债清零后的封版候选。**生产部署前必须在目标架构机器上执行 `bash verify_docker.sh`
 > 并通过全部检查项，方可将 Tag 晋升为 `v1.0.0` 正式版。**
 >
-> - 发布说明：[docs/RELEASE_NOTES_v1.0.1.md](docs/RELEASE_NOTES_v1.0.1.md)
-> > > - 完整变更：[docs/ITERATION6_CHANGES.md](docs/ITERATION6_CHANGES.md)
+> - 发布说明：[docs/RELEASE_NOTES_v1.0.2.md](docs/RELEASE_NOTES_v1.0.2.md)
+> - 代码质量审查：[docs/CODE_QUALITY_AUDIT.md](docs/CODE_QUALITY_AUDIT.md)
+> - 技术债：[docs/TECH_DEBT.md](docs/TECH_DEBT.md)
+> - 完整变更：[docs/ITERATION6_CHANGES.md](docs/ITERATION6_CHANGES.md)
 > - 发布与变更管制：[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md)
 - Docker 实机门禁 SOP：[docs/DOCKER_GATE_SOP.md](docs/DOCKER_GATE_SOP.md)
 - 开发者模式与手动测试：[docs/DEVELOPER_MODE.md](docs/DEVELOPER_MODE.md)
+- 统一推送主触发与超时兜底：[docs/UNIFIED_PUSH.md](docs/UNIFIED_PUSH.md)
 >
 > Docker 实机验证未通过前，不得切换生产流量。
 
@@ -122,15 +125,18 @@ docker compose logs -f checkin-platform
 
 打开 **<http://localhost:5000>**。
 
-首次部署默认管理员：
+首次启动时若未设置 `ADMIN_PASS`，系统会自动生成随机密码并输出到容器日志。
+请使用以下命令获取（仅首次创建管理员时输出）：
 
-| 用户名 | 密码 |
-| --- | --- |
-| `admin` | `admin123` |
+```bash
+docker logs <container> 2>&1 | grep 'Generated admin password'
+```
 
-> ⚠️ 登录后请立即点击右上角头像 →「用户设置」，修改用户名或密码。
-> 如果修改了 `.env` 中的 `ADMIN_USER` / `ADMIN_PASS`，它们只在**首次创建数据库时**生效；
-> 数据库已存在时不会自动改凭据。
+获取后请使用该密码登录；首次登录会被强制要求修改密码。
+
+**显式设置 `ADMIN_PASS` 时策略不同**：系统使用你指定的密码，首次登录**不会**强制改密。
+请确保该密码符合安全策略，并自行在「用户设置」中完成首次改密。
+`ADMIN_USER` / `ADMIN_PASS` 不会修改已存在账户的凭据。
 
 ### 4. 配置示例模块
 
@@ -189,8 +195,8 @@ BASE_URL=http://127.0.0.1:5000 node scripts/check_frontend_privacy.mjs
 
 ```bash
 VERIFY_BASE_URL=http://127.0.0.1:5000/api \
-ADMIN_USER=admin ADMIN_PASS=admin123 \
-python3 scripts/verify_api.py
+ADMIN_USER=admin ADMIN_PASS=<首次生成的随机密码> \
+python3 scripts/verify_api.py --password <首次生成的随机密码>
 ```
 
 ---
@@ -471,7 +477,7 @@ async def run(params: dict[str, Any]) -> dict[str, Any]:
 | `TZ` | `Asia/Shanghai` | 容器系统时区（影响容器日志时间）。 |
 | `TIMEZONE` | `Asia/Shanghai` | 随机调度、时间窗与页面展示的业务时区。 |
 | `ADMIN_USER` | `admin` | 首次创建的管理员用户名。 |
-| `ADMIN_PASS` | `admin123` | 首次创建的管理员密码。 |
+| `ADMIN_PASS` | 留空自动生成 | 首次创建的管理员密码。留空：生成随机密码并强制首次改密；显式设置：使用指定密码且首次登录不强制改密。 |
 | `SECRET_KEY` | 自动生成 | Cookie 签名与 AES-256-GCM 参数加密密钥。留空时生成于 `data/.secret_key`。 |
 | `COOKIE_SECURE` | `false` | HTTPS 部署必须设为 `true`；内网 HTTP 保持 `false`。 |
 | `CSRF_ENABLED` | `true` | 写请求 CSRF Header 校验开关。 |
@@ -490,7 +496,8 @@ async def run(params: dict[str, Any]) -> dict[str, Any]:
 | `CORS_ORIGINS` | 空 | 逗号分隔的额外允许来源，同源部署不需要配置。 |
 
 修改 `.env` 后执行 `docker compose up -d` 重建容器。注意：**修改 `ADMIN_USER` / `ADMIN_PASS`
-不会修改已存在账户的密码。**
+不会修改已存在账户的密码；`ADMIN_PASS` 仅在首次创建管理员时生效。
+留空时首次登录强制改密；显式设置时首次登录不强制改密，请自行确认密码强度。**
 
 ### 关于 SECRET_KEY
 

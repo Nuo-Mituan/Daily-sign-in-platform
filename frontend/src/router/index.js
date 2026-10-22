@@ -60,7 +60,7 @@ const routes = [
       {
         path: 'settings',
         name: 'settings',
-        component: () => import('@/views/ChangePasswordView.vue'),
+        component: () => import('@/views/SettingsView.vue'),
         meta: { title: '用户设置' },
       },
       {
@@ -110,6 +110,9 @@ router.beforeEach(async (to) => {
 
   if (auth.mustChangePassword && to.name !== 'change-password') {
     return { name: 'change-password' }
+  }
+  if (to.name === 'change-password' && !auth.mustChangePassword) {
+    return { name: 'dashboard' }
   }
 
   return true

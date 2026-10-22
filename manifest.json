@@ -1,0 +1,566 @@
+{
+  "generated_at": "2026-10-22T22:46:25+08:00",
+  "files": [
+    {
+      "source": "backend/requirements.txt",
+      "image": "image/requirements.txt",
+      "reason": "Runtime Python dependencies (production only)"
+    },
+    {
+      "source": "backend/app/deps.py",
+      "image": "image/backend/app/deps.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/config.py",
+      "image": "image/backend/app/config.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/models.py",
+      "image": "image/backend/app/models.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/database.py",
+      "image": "image/backend/app/database.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/security.py",
+      "image": "image/backend/app/security.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/__init__.py",
+      "image": "image/backend/app/__init__.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/crypto.py",
+      "image": "image/backend/app/crypto.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/schemas.py",
+      "image": "image/backend/app/schemas.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/contracts.py",
+      "image": "image/backend/app/contracts.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/migrations.py",
+      "image": "image/backend/app/migrations.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/scheduling.py",
+      "image": "image/backend/app/scheduling.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/main.py",
+      "image": "image/backend/app/main.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/module_loader.py",
+      "image": "image/backend/app/module_loader.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/check_imports.py",
+      "image": "image/backend/app/check_imports.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/timeutils.py",
+      "image": "image/backend/app/timeutils.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/routers/auth.py",
+      "image": "image/backend/app/routers/auth.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/routers/system.py",
+      "image": "image/backend/app/routers/system.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/routers/__init__.py",
+      "image": "image/backend/app/routers/__init__.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/routers/dashboard.py",
+      "image": "image/backend/app/routers/dashboard.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/routers/logs.py",
+      "image": "image/backend/app/routers/logs.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/routers/modules.py",
+      "image": "image/backend/app/routers/modules.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/routers/push.py",
+      "image": "image/backend/app/routers/push.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/push_drivers/registry.py",
+      "image": "image/backend/app/push_drivers/registry.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/push_drivers/__init__.py",
+      "image": "image/backend/app/push_drivers/__init__.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/push_drivers/builtin_specs.py",
+      "image": "image/backend/app/push_drivers/builtin_specs.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/push_drivers/base.py",
+      "image": "image/backend/app/push_drivers/base.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/push_drivers/validation.py",
+      "image": "image/backend/app/push_drivers/validation.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/push_drivers/custom/.gitkeep",
+      "image": "image/backend/app/push_drivers/custom/.gitkeep",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/bootstrap.py",
+      "image": "image/backend/app/services/bootstrap.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/ownership.py",
+      "image": "image/backend/app/services/ownership.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/redaction.py",
+      "image": "image/backend/app/services/redaction.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/auth_sessions.py",
+      "image": "image/backend/app/services/auth_sessions.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/execution.py",
+      "image": "image/backend/app/services/execution.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/auth_guard.py",
+      "image": "image/backend/app/services/auth_guard.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/maintenance.py",
+      "image": "image/backend/app/services/maintenance.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_outbox.py",
+      "image": "image/backend/app/services/push_outbox.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_plan.py",
+      "image": "image/backend/app/services/push_plan.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/module_upload.py",
+      "image": "image/backend/app/services/module_upload.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_time.py",
+      "image": "image/backend/app/services/push_time.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/lock_registry.py",
+      "image": "image/backend/app/services/lock_registry.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/legacy_wash.py",
+      "image": "image/backend/app/services/legacy_wash.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/preferences.py",
+      "image": "image/backend/app/services/preferences.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/__init__.py",
+      "image": "image/backend/app/services/__init__.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_summary.py",
+      "image": "image/backend/app/services/push_summary.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/module_update.py",
+      "image": "image/backend/app/services/module_update.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/hub.py",
+      "image": "image/backend/app/services/hub.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_pool.py",
+      "image": "image/backend/app/services/push_pool.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_state.py",
+      "image": "image/backend/app/services/push_state.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/capture.py",
+      "image": "image/backend/app/services/capture.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_delivery.py",
+      "image": "image/backend/app/services/push_delivery.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/module_query_service.py",
+      "image": "image/backend/app/services/module_query_service.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/scheduler.py",
+      "image": "image/backend/app/services/scheduler.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/ring_log.py",
+      "image": "image/backend/app/services/ring_log.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/schedules.py",
+      "image": "image/backend/app/services/schedules.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push_lock.py",
+      "image": "image/backend/app/services/push_lock.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "backend/app/services/push.py",
+      "image": "image/backend/app/services/push.py",
+      "reason": "FastAPI runtime source"
+    },
+    {
+      "source": "templates/advanced_checkin/config.json",
+      "image": "image/templates/advanced_checkin/config.json",
+      "reason": "Module authoring templates"
+    },
+    {
+      "source": "templates/advanced_checkin/main.py",
+      "image": "image/templates/advanced_checkin/main.py",
+      "reason": "Module authoring templates"
+    },
+    {
+      "source": "docker-entrypoint.py",
+      "image": "image/docker-entrypoint.py",
+      "reason": "Container privilege-drop entrypoint"
+    },
+    {
+      "source": "frontend/package.json",
+      "image": "image/frontend/package.json",
+      "reason": "Frontend build manifest"
+    },
+    {
+      "source": "frontend/package-lock.json",
+      "image": "image/frontend/package-lock.json",
+      "reason": "Deterministic npm install"
+    },
+    {
+      "source": "frontend/index.html",
+      "image": "image/frontend/index.html",
+      "reason": "Vite entry HTML"
+    },
+    {
+      "source": "frontend/vite.config.js",
+      "image": "image/frontend/vite.config.js",
+      "reason": "Vite build config"
+    },
+    {
+      "source": "frontend/src/App.vue",
+      "image": "image/frontend/src/App.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/main.js",
+      "image": "image/frontend/src/main.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/stores/auth.js",
+      "image": "image/frontend/src/stores/auth.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/stores/app.js",
+      "image": "image/frontend/src/stores/app.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/utils/constants.js",
+      "image": "image/frontend/src/utils/constants.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/utils/format.js",
+      "image": "image/frontend/src/utils/format.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/utils/accounts.js",
+      "image": "image/frontend/src/utils/accounts.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/utils/schedule.js",
+      "image": "image/frontend/src/utils/schedule.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/styles/global.css",
+      "image": "image/frontend/src/styles/global.css",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/ModuleIcon.vue",
+      "image": "image/frontend/src/components/ModuleIcon.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/StatusTag.vue",
+      "image": "image/frontend/src/components/StatusTag.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/UnifiedTimeoutSettings.vue",
+      "image": "image/frontend/src/components/UnifiedTimeoutSettings.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/ParamField.vue",
+      "image": "image/frontend/src/components/ParamField.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/StatCard.vue",
+      "image": "image/frontend/src/components/StatCard.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/RunLogDrawer.vue",
+      "image": "image/frontend/src/components/RunLogDrawer.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/RandomScheduleField.vue",
+      "image": "image/frontend/src/components/RandomScheduleField.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/components/AccountEditor.vue",
+      "image": "image/frontend/src/components/AccountEditor.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/layouts/AppLayout.vue",
+      "image": "image/frontend/src/layouts/AppLayout.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/api/index.js",
+      "image": "image/frontend/src/api/index.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/api/csrf.js",
+      "image": "image/frontend/src/api/csrf.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/api/http.js",
+      "image": "image/frontend/src/api/http.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/SystemLogsView.vue",
+      "image": "image/frontend/src/views/SystemLogsView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/ModuleDetailView.vue",
+      "image": "image/frontend/src/views/ModuleDetailView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/ChangePasswordView.vue",
+      "image": "image/frontend/src/views/ChangePasswordView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/LogsView.vue",
+      "image": "image/frontend/src/views/LogsView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/SettingsView.vue",
+      "image": "image/frontend/src/views/SettingsView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/LoginView.vue",
+      "image": "image/frontend/src/views/LoginView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/DashboardView.vue",
+      "image": "image/frontend/src/views/DashboardView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/PushCenterView.vue",
+      "image": "image/frontend/src/views/PushCenterView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/ModulesView.vue",
+      "image": "image/frontend/src/views/ModulesView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/views/GuideView.vue",
+      "image": "image/frontend/src/views/GuideView.vue",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/src/router/index.js",
+      "image": "image/frontend/src/router/index.js",
+      "reason": "Vue production source"
+    },
+    {
+      "source": "frontend/public/favicon.svg",
+      "image": "image/frontend/public/favicon.svg",
+      "reason": "Static public assets"
+    },
+    {
+      "source": ".env.example",
+      "image": "image/.env.example",
+      "reason": "Non-sensitive configuration template"
+    },
+    {
+      "source": "generated",
+      "image": "image/Dockerfile",
+      "reason": "Multi-stage production Dockerfile derived from Dockerfile.prod and current runtime layout"
+    },
+    {
+      "source": "generated",
+      "image": "image/.dockerignore",
+      "reason": "Build-context exclusion rules"
+    },
+    {
+      "source": "README.md",
+      "image": "image/README.md",
+      "reason": "v1.0.5 random-vs-explicit ADMIN_PASS policy documentation"
+    },
+    {
+      "source": "scripts/verify_api.py",
+      "image": "image/scripts/verify_api.py",
+      "reason": "Random-password-aware API verification"
+    },
+    {
+      "source": "release/v1.0.0-rc.2/verify_docker.sh",
+      "image": "image/release/v1.0.0-rc.2/verify_docker.sh",
+      "reason": "v1.0.5 verification script update"
+    },
+    {
+      "source": "modules/requirements.txt",
+      "image": "image/modules/requirements.txt",
+      "reason": "Release asset"
+    },
+    {
+      "source": "release/v1.0.0-rc.2/verify_docker.sh",
+      "image": "release/v1.0.0-rc.2/verify_docker.sh",
+      "reason": "v1.0.5 verification script; skips tests absent from release, masks password"
+    }
+  ],
+  "excluded_patterns": [
+    "tests/",
+    "test_*.py",
+    ".pytest_cache",
+    ".git",
+    ".venv",
+    "node_modules",
+    "__pycache__",
+    "*.md (except README)",
+    "docs/",
+    "data/",
+    "logs/",
+    "*.db",
+    "*.zip",
+    ".env",
+    ".DS_Store",
+    "Dockerfile.dev",
+    "docker-compose.dev.*"
+  ],
+  "total_files": 106,
+  "audit_fixes": [
+    {
+      "phase": "v1.0.5-admin-password-doc-alignment",
+      "files": [
+        "README.md",
+        "scripts/verify_api.py",
+        "release/v1.0.0-rc.2/verify_docker.sh"
+      ]
+    },
+    {
+      "phase": "v1.0.5-admin-password-policy-alignment",
+      "files": [
+        "README.md"
+      ]
+    }
+  ]
+}

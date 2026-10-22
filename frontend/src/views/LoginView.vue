@@ -212,7 +212,12 @@ const features = [
 
 function safeRedirect() {
   const target = route.query.redirect
-  if (typeof target === 'string' && target.startsWith('/') && !target.startsWith('//')) {
+  if (
+    typeof target === 'string' &&
+    target.startsWith('/') &&
+    !target.startsWith('//') &&
+    target !== '/change-password'
+  ) {
     return target
   }
   return '/dashboard'
