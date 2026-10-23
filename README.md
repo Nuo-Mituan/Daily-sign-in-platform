@@ -118,7 +118,7 @@ docker compose logs -f checkin-platform
 ```text
 调度器已启动，时区=Asia/Shanghai
 模块同步完成：新增 2，更新 0，异常 0
-签到云台 v1.0.0 启动完成 | 模块 2 | 已排程 0 | 时区 Asia/Shanghai
+签到云台 v1.0.5 启动完成 | 模块 2 | 已排程 0 | 时区 Asia/Shanghai
 ```
 
 ### 3. 访问
@@ -132,7 +132,8 @@ docker compose logs -f checkin-platform
 docker logs <container> 2>&1 | grep 'Generated admin password'
 ```
 
-获取后请使用该密码登录；首次登录会被强制要求修改密码。
+完整密码仅在首次创建管理员时输出一次到容器 stdout，不会写入 `.initial_pwd` 或日志文件；
+请在首次启动后立即从部署日志中保存，并妥善保管。获取后使用该密码登录；首次登录会被强制要求修改密码。
 
 **显式设置 `ADMIN_PASS` 时策略不同**：系统使用你指定的密码，首次登录**不会**强制改密。
 请确保该密码符合安全策略，并自行在「用户设置」中完成首次改密。
@@ -326,6 +327,35 @@ logs/executions/<key>/   # 执行日志文件镜像
 - 模块页提供「启用推送」开关，推送内容由全局模板渲染。
 - 保存后若时间窗 / 周期变化，会取消旧计划并立即生成本期新时间。
 - 「使用模块默认时间窗」可恢复 `config.json` 的 `default_*` 值。
+
+### 模块图标来源
+
+模块图标直接由 `icon` 字段解析，同时保留旧 `icon_source` / `icon_data` 字段兼容：
+
+| `icon` 值 | 类型 | 示例 |
+| --- | --- | --- |
+| Emoji / 文本 | 原样文本渲染 | `"icon": "🎯"` |
+| Base64 Data URI | 严格正则校验，≤64KB | `"icon": "data:image/png;base64,..."` |
+| 模块内相对路径 | `./` 开头，只允许模块自身目录 | `"icon": "./favicon.ico"` |
+| HTTP(S) URL | 远程图片，加载失败统一降级 | `"icon": "https://example.com/icon.png"` |
+
+- 本地文件放在 `modules/<module-key>/` 内，例如 `modules/demo_checkin/favicon.ico`。
+- 后端对本地路径执行相对路径、`..`、绝对路径、真实路径前缀与符号链接逃逸校验；仅允许 ICO 文件头 `00 00 01 00`，大小 ≤64KB。
+- Base64 仅允许 `x-icon`、`png`、`svg+xml`，后端和前端双重校验；禁止 `javascript:` 或非图片 Data URI。
+- 任一加载/校验失败都会回退为 `⚠️`，不会显示破图或向控制台抛出未捕获异常。
+- `icon_source: "local"` 仍兼容读取默认 `icon.ico`；`icon_source: "base64"` 仍兼容 `icon_data`。
+
+### 图标透明背景诊断
+
+本地 ICO 会在后端通过 Pillow 转成 RGBA PNG 返回，透明像素不会被前端容器的渐变底色污染。
+如仍有异常，使用诊断脚本检查 Base64/文件是否包含 Alpha：
+
+```bash
+python3 scripts/check_icon_alpha.py --base64 'data:image/x-icon;base64,AAABAAEAEBAAAAAAIABSAAAAFgAAAIlQTkcNChoKAAAADUlIRFIAAAAQAAAAEAgGAAAAH/P/YQAAABlJREFUeJxjYBgFo4AI8N/B4T8x6kbBkAYAvkECf0xuXgsAAAAASUVORK5CYII='
+```
+
+输出 `alpha_min=0` 表示存在透明像素。若 ICO 本身只有不透明颜色，`alpha_min=255` 属于正常，不应强制加透明。
+前端图片容器在渲染图片时会移除渐变背景、边框和阴影；Emoji 仍保留原有底色。
 
 ### 立即执行与实时日志
 
