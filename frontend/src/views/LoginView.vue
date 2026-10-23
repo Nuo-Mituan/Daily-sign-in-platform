@@ -176,7 +176,7 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const version = '1.0.2'
+const version = '1.0.5'
 
 const formRef = ref(null)
 const submitting = ref(false)
