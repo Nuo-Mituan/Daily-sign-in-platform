@@ -18,6 +18,7 @@ import json
 import time as clock
 import logging
 from dataclasses import dataclass
+from typing import cast
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -435,8 +436,8 @@ async def _send_summary(
             batch.last_attempt_at = utcnow()
             await db.commit()
             raw_result = await send_message(
-                config["channel"],
-                config["config"],
+                cast(str, config["channel"]),
+                cast(dict[str, object], config["config"]),
                 title,
                 summary,
                 idempotency_key=batch.idempotency_key,

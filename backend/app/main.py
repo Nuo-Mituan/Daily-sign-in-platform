@@ -57,7 +57,7 @@ async def patch_schema() -> None:
             conn.execute(text("SAVEPOINT sp_password_must_change"))
             try:
                 conn.execute(text(
-                    "ALTER TABLE users ADD COLUMN password_must_change BOOLEAN NOT NULL DEFAULT TRUE"
+                    "ALTER TABLE users ADD COLUMN password_must_change BOOLEAN NOT NULL DEFAULT FALSE"
                 ))
                 conn.execute(text("RELEASE SAVEPOINT sp_password_must_change"))
             except (OperationalError, ProgrammingError) as exc:

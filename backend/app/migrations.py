@@ -31,6 +31,8 @@ _LEGACY_COLUMNS: dict[str, str] = {
     "accounts_encrypted": "TEXT",
     "push_independent": "BOOLEAN",
     "push_unified": "BOOLEAN",
+    "icon_source": "VARCHAR(16) DEFAULT 'url'",
+    "icon_data": "TEXT",
 }
 
 

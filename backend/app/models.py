@@ -106,7 +106,9 @@ class Module(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     author: Mapped[str] = mapped_column(String(120), default="")
     version: Mapped[str] = mapped_column(String(40), default="1.0.0")
-    icon: Mapped[str] = mapped_column(String(16), default="🧩")
+    icon: Mapped[str] = mapped_column(Text, default="🧩")
+    icon_source: Mapped[str] = mapped_column(String(16), default="url")
+    icon_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Legacy Cron columns kept for database/backward compatibility. New scheduling
     # uses start_time / end_time / repeat_cycle below.

@@ -125,7 +125,9 @@ class ModuleConfig(BaseModel):
     description: str = Field(default="", max_length=2000)
     author: str = Field(default="", max_length=120)
     version: str = Field(default="1.0.0", max_length=40)
-    icon: str = Field(default="🧩", max_length=16)
+    icon: str = Field(default="🧩", max_length=65536)
+    icon_source: Literal["url", "base64", "local"] = "url"
+    icon_data: str | None = Field(default=None, max_length=65536)
     # Legacy field accepted for old modules; new modules should use the fields below.
     default_cron: str | None = Field(default=None, max_length=100)
     default_start_time: str = Field(default="08:00", max_length=5)
@@ -144,6 +146,21 @@ class ModuleConfig(BaseModel):
             if param.key in seen:
                 raise ValueError(f"参数 key 重复：{param.key}")
             seen.add(param.key)
+
+        data_uri = self.icon_data
+        if self.icon.startswith("data:"):
+            data_uri = self.icon
+        if data_uri is not None:
+            if len(data_uri.encode("utf-8")) > 65536:
+                raise ValueError("Base64 图标不能超过 64KB")
+            import re
+            if not re.fullmatch(
+                r"data:image/(x-icon|png|svg\+xml);base64,[A-Za-z0-9+/=]+",
+                data_uri,
+            ):
+                raise ValueError("图标不是合法的 Base64 图片 Data URI")
+        elif self.icon_source == "base64":
+            raise ValueError("icon_source=base64 时必须提供 icon_data")
 
         # Backward compatibility: derive a reasonable daily window from a simple
         # legacy cron expression when the new fields were not supplied.
@@ -310,6 +327,8 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
                 author=config.author,
                 version=config.version,
                 icon=config.icon or "🧩",
+                icon_source=config.icon_source,
+                icon_data=config.icon_data,
                 default_cron=config.default_cron or "0 8 * * *",
                 cron=config.default_cron or "0 8 * * *",
                 default_start_time=config.default_start_time,
@@ -336,6 +355,8 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             row.author = config.author
             row.version = config.version
             row.icon = config.icon or "🧩"
+            row.icon_source = config.icon_source
+            row.icon_data = config.icon_data
             row.default_cron = config.default_cron or row.default_cron or "0 8 * * *"
             row.default_start_time = config.default_start_time
             row.default_end_time = config.default_end_time

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
+from io import BytesIO
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from PIL import Image, UnidentifiedImageError
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -116,6 +120,8 @@ def _module_out(
         author=module.author,
         version=module.version,
         icon=module.icon,
+        icon_source=module.icon_source or "url",
+        icon_data=module.icon_data,
         start_time=start,
         end_time=end,
         repeat_cycle=cycle,
@@ -376,7 +382,7 @@ async def upload_module(
     await scheduler_service.reconcile(all_modules)
     await invalidate_all_sessions(db, current_user.id, exclude_session_id=context.session.id)
     await db.commit()
-    context = EncryptionContext(
+    encryption_context = EncryptionContext(
         user_id=await owner_user_id(db), module_key=module.key, account_index=-1
     )
     return UploadResponse(
@@ -384,7 +390,7 @@ async def upload_module(
             f"模块「{module.name}」安装成功，已加入模块列表"
             "（默认禁用，请配置账号与随机时间后启用）"
         ),
-        module=_module_out(module, await _get_schedule(db, module), context),
+        module=_module_out(module, await _get_schedule(db, module), encryption_context),
     )
 
 
@@ -420,6 +426,64 @@ async def preview_schedule(payload: SchedulePreviewRequest) -> SchedulePreviewRe
         repeat_sub_value=sub_value,
         label=repeat_sub_label(cycle, sub_value),
         next_occurrence=occurrence,
+    )
+
+
+@router.get("/icon", summary="读取签到模块本地图标")
+async def module_icon(
+    key: str = Query(min_length=1, max_length=80),
+    path: str = Query(default="icon.ico", min_length=1, max_length=255),
+) -> Response:
+    """Serve an image from one module directory with traversal/symlink checks."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", key):
+        raise HTTPException(status_code=400, detail="模块标识不合法")
+    if "\x00" in path or "\\" in path or path.startswith("/"):
+        raise HTTPException(status_code=400, detail="图标路径不合法")
+    from pathlib import PurePosixPath
+
+    rel = PurePosixPath(path)
+    if rel.is_absolute() or any(part in {"..", ""} for part in rel.parts):
+        raise HTTPException(status_code=400, detail="图标路径不合法")
+    module_root = (settings.modules_dir / key).resolve()
+    root = settings.modules_dir.resolve()
+    if not module_root.is_relative_to(root):
+        raise HTTPException(status_code=403, detail="图标路径不合法")
+    candidate = (module_root / rel).resolve()
+    if not candidate.is_relative_to(module_root):
+        logger.warning("拒绝模块图标路径越界：%s/%s", key, path)
+        raise HTTPException(status_code=403, detail="图标路径不合法")
+    try:
+        size = candidate.stat().st_size
+    except (OSError, ValueError):
+        logger.warning("模块图标不存在或不可读：%s/%s", key, path)
+        raise HTTPException(status_code=404, detail="图标不存在") from None
+    if size > 64 * 1024:
+        logger.warning("模块图标超过 64KB：%s/%s", key, path)
+        raise HTTPException(status_code=413, detail="图标文件过大")
+    try:
+        data = candidate.read_bytes()
+    except OSError:
+        logger.warning("模块图标读取失败：%s/%s", key, path)
+        raise HTTPException(status_code=404, detail="图标不存在") from None
+    if len(data) < 4 or data[:4] != b"\x00\x00\x01\x00":
+        logger.warning("模块图标不是合法 ICO：%s/%s", key, path)
+        raise HTTPException(status_code=415, detail="图标格式不合法")
+    try:
+        with Image.open(BytesIO(data)) as image:
+            if image.format != "ICO":
+                raise UnidentifiedImageError("not ico")
+            if image.width <= 0 or image.height <= 0 or image.width * image.height > 1024 * 1024:
+                raise ValueError("icon dimensions too large")
+            rgba = image.convert("RGBA")
+            output = BytesIO()
+            rgba.save(output, format="PNG", optimize=True)
+    except (UnidentifiedImageError, OSError, ValueError):
+        logger.warning("模块图标 ICO 解码失败：%s/%s", key, path)
+        raise HTTPException(status_code=415, detail="图标格式不合法") from None
+    return Response(
+        content=output.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 

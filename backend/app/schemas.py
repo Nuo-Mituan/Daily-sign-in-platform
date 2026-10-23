@@ -75,6 +75,8 @@ class ModuleOut(BaseModel):
     author: str
     version: str
     icon: str
+    icon_source: str = "url"
+    icon_data: str | None = None
 
     start_time: str
     end_time: str
