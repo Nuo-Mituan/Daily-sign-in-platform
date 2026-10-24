@@ -6,9 +6,10 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -157,6 +158,18 @@ app = FastAPI(
     ],
 )
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    """Never let auth/HTTP errors inherit an image or stream content type."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers,
+    )
+
+
 if settings.cors_origin_list:
     app.add_middleware(
         CORSMiddleware,
@@ -168,6 +181,7 @@ if settings.cors_origin_list:
 
 api = settings.api_prefix.rstrip("/")
 app.include_router(auth.router, prefix=api)
+app.include_router(modules.public_router, prefix=api)
 app.include_router(modules.router, prefix=api)
 app.include_router(logs.router, prefix=api)
 app.include_router(dashboard.router, prefix=api)

@@ -92,6 +92,10 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
+# Public icon router: browsers load <img> without JS/CSRF and icons are
+# non-sensitive, cacheable static resources. Path/traversal checks still apply.
+public_router = APIRouter(prefix="/modules", tags=["签到模块"])
+
 
 # --------------------------------------------------------------- serializers
 def _schedule_fields(module: Module) -> tuple[str, str, str, str]:
@@ -432,7 +436,7 @@ async def preview_schedule(payload: SchedulePreviewRequest) -> SchedulePreviewRe
     )
 
 
-@router.get("/icon", summary="读取签到模块本地图标")
+@public_router.get("/icon", summary="读取签到模块本地图标")
 async def module_icon(
     key: str = Query(min_length=1, max_length=80),
     path: str = Query(default="icon.ico", min_length=1, max_length=255),
@@ -802,14 +806,15 @@ async def delete_module(
     physical_path: Path | None = None
 
     if delete_files:
-        physical_path = get_module_physical_path(module).resolve()
+        physical = get_module_physical_path(module).resolve()
+        physical_path = physical
         root = settings.modules_dir.resolve()
-        if not physical_path.is_relative_to(root) or physical_path.is_symlink():
+        if not physical.is_relative_to(root) or physical.is_symlink():
             raise HTTPException(status_code=403, detail="模块目录路径不合法")
-        if physical_path.exists():
-            trash_path = physical_path.parent / f".trash-{key}-{uuid.uuid4().hex[:8]}"
+        if physical.exists():
+            trash_path = physical.parent / f".trash-{key}-{uuid.uuid4().hex[:8]}"
             try:
-                physical_path.rename(trash_path)
+                physical.rename(trash_path)
             except OSError as exc:
                 logger.exception("模块目录暂存失败：key=%s", key)
                 raise HTTPException(status_code=500, detail="无法移动模块目录，删除已取消") from exc
