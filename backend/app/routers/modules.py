@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import shutil
@@ -488,6 +489,8 @@ _ICON_RATE: dict[str, list[float]] = {}
 _ICON_RATE_WINDOW = 60.0
 _ICON_RATE_CLEANUP = 300.0
 _ICON_RATE_LIMIT = 120
+_ICON_RATE_LAST_CLEANUP = 0.0
+_ICON_DECODE_LOCK: asyncio.Lock | None = None
 _ICON_CACHE: "OrderedDict[tuple[str, int], tuple[bytes, str, float]]" = OrderedDict()
 _ICON_CACHE_TTL = 60.0
 _ICON_CACHE_MAX = 128
@@ -525,18 +528,21 @@ async def module_icon(
     # Process-local limiter. Multi-worker deployments need a shared Redis limiter.
     client_ip = request.client.host if request.client else "unknown"
     now = time.monotonic()
-    if len(_ICON_RATE) > 1024:
+    global _ICON_RATE_LAST_CLEANUP
+    if now - _ICON_RATE_LAST_CLEANUP >= 60:
         cutoff = now - _ICON_RATE_CLEANUP
         for stale_ip in [
             ip for ip, stamps in _ICON_RATE.items()
             if not stamps or stamps[-1] < cutoff
         ]:
             _ICON_RATE.pop(stale_ip, None)
+        _ICON_RATE_LAST_CLEANUP = now
     bucket = [stamp for stamp in _ICON_RATE.get(client_ip, []) if now - stamp < _ICON_RATE_WINDOW]
     if len(bucket) >= _ICON_RATE_LIMIT:
-        raise HTTPException(
+        return Response(
+            content=json.dumps({"detail": "图标请求过于频繁"}).encode(),
             status_code=429,
-            detail="图标请求过于频繁",
+            media_type="application/json",
             headers={"Retry-After": "60"},
         )
     bucket.append(now)
@@ -574,19 +580,48 @@ async def module_icon(
         raise HTTPException(status_code=403, detail="图标路径不合法")
 
     try:
-        data, media_type, mtime_ns = await asyncio.to_thread(load_icon, candidate)
+        current_mtime = await asyncio.to_thread(
+            lambda: candidate.stat().st_mtime_ns
+        )
+    except (OSError, ValueError):
+        raise HTTPException(status_code=404, detail="图标不存在") from None
+    cache_key = (str(candidate.resolve()), current_mtime)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        data, media_type = cached
+        return Response(
+            content=data,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    global _ICON_DECODE_LOCK
+    if _ICON_DECODE_LOCK is None:
+        _ICON_DECODE_LOCK = asyncio.Lock()
+    try:
+        async with _ICON_DECODE_LOCK:
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                data, media_type = cached
+            else:
+                data, media_type, mtime_ns = await asyncio.wait_for(
+                    asyncio.to_thread(load_icon, candidate), timeout=10.0
+                )
+                cache_key = (str(candidate.resolve()), mtime_ns)
+                _cache_put(cache_key, data, media_type)
+    except asyncio.TimeoutError:
+        return Response(
+            content=json.dumps({"detail": "图标解码超时"}).encode(),
+            status_code=504,
+            media_type="application/json",
+            headers={"Retry-After": "1"},
+        )
     except ModuleIconError as exc:
         logger.warning(
             "模块图标读取失败：key=%s path=%s resolved=%s detail=%s",
             key, path, candidate, exc.detail,
         )
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    cache_key = (str(candidate), mtime_ns)
-    cached = _cache_get(cache_key)
-    if cached is None:
-        _cache_put(cache_key, data, media_type)
-    else:
-        data, media_type = cached
     logger.info(
         "解析模块图标：key=%s directory=%s path=%s resolved=%s",
         key, directory, path, candidate,

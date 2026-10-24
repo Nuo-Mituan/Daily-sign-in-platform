@@ -67,6 +67,17 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         raise ModuleIconTooLarge()
 
     if data[:4] == b"\x00\x00\x01\x00":
+        if len(data) > 256 * 1024:
+            raise ModuleIconInvalid()
+        if len(data) < 22 or data[2:4] != b"\x01\x00":
+            raise ModuleIconInvalid()
+        count = int.from_bytes(data[4:6], "little")
+        if count <= 0:
+            raise ModuleIconInvalid()
+        width = data[6] or 256
+        height = data[7] or 256
+        if not (0 < width <= 256 and 0 < height <= 256):
+            raise ModuleIconInvalid()
         return _decode_pillow(data, "ICO"), "image/png", stat.st_mtime_ns
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return _decode_pillow(data, "PNG"), "image/png", stat.st_mtime_ns

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -37,22 +38,6 @@ async def migrate_modules(
         rows = (await db.execute(select(Module))).scalars().all()
         mapping = mappings or {}
         by_directory = {item.key: item for item in scanned}
-
-        def target_for(row: Module) -> tuple[str, str] | None:
-            if row.key in mapping:
-                return mapping[row.key], "explicit --map"
-            item = next((it for it in scanned if it.key == row.directory_name), None)
-            if item is not None and item.config is not None:
-                return item.key, "directory_name"
-            candidates = [
-                it for it in scanned
-                if it.config is not None
-                and it.key != row.key
-                and it.key not in {r.directory_name for r in rows if r.directory_name}
-            ]
-            if row.directory_name:
-                return row.directory_name, "existing directory_name"
-            return None
 
         if mapping:
             for old_key, directory in mapping.items():
@@ -84,7 +69,11 @@ async def migrate_modules(
                     row.legacy_key = row.key
                     row.load_error = None
             if not dry_run:
-                await db.commit()
+                try:
+                    await db.commit()
+                except Exception:
+                    await db.rollback()
+                    raise
             await dispose_db()
             return report
 
@@ -137,7 +126,11 @@ async def migrate_modules(
                 row.legacy_key = row.key
                 row.load_error = None
         if not dry_run:
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
     await dispose_db()
     return report
 
