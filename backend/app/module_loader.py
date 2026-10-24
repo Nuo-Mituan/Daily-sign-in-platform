@@ -313,6 +313,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
     existing = {row.key: row for row in existing_rows}
     result = SyncResult()
     seen: set[str] = set()
+    scanned_keys = {item.key for item in scanned}
 
     for item in scanned:
         seen.add(item.key)
@@ -336,6 +337,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
                 candidate
                 for candidate in existing.values()
                 if candidate.key not in seen
+                and candidate.key not in scanned_keys
                 and candidate.directory_name is None
                 and candidate.name == config.name
             ]
