@@ -6,6 +6,7 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import os
 import re
 import shutil
 import time
@@ -493,11 +494,34 @@ _ICON_RATE_LIMIT = 120
 _ICON_RATE_LAST_CLEANUP = 0.0
 _ICON_DECODE_LOCK = asyncio.Lock()
 # Dedicated pool for icon decode only; tune max_workers per deployment.
-_ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+_ICON_DECODE_POOL_SIZE = int(os.getenv("ICON_DECODE_POOL_SIZE", "4"))
+_ICON_DECODE_TIMEOUT = float(os.getenv("ICON_DECODE_TIMEOUT", "10.0"))
+_ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
+    max_workers=max(1, min(_ICON_DECODE_POOL_SIZE, 4))
+)
+
+
+def shutdown_icon_decode_pool() -> None:
+    """Release the dedicated icon decoder pool during application shutdown."""
+    _ICON_DECODE_POOL.shutdown(wait=False)
 _ICON_CACHE: "OrderedDict[tuple[str, int], tuple[bytes, str, float]]" = OrderedDict()
 _ICON_CACHE_TTL = 60.0
 _ICON_CACHE_MAX = 128
 _ICON_CACHE_LOCK = Lock()
+
+
+def _cleanup_icon_rate(now: float) -> None:
+    global _ICON_RATE_LAST_CLEANUP
+    if now - _ICON_RATE_LAST_CLEANUP < 60:
+        return
+    cutoff = now - _ICON_RATE_CLEANUP
+    stale_ips = [
+        ip for ip, stamps in list(_ICON_RATE.items())
+        if not stamps or stamps[-1] < cutoff
+    ]
+    for ip in stale_ips:
+        _ICON_RATE.pop(ip, None)
+    _ICON_RATE_LAST_CLEANUP = now
 
 
 def _cache_get(cache_key: tuple[str, int]) -> tuple[bytes, str] | None:
@@ -531,16 +555,7 @@ async def module_icon(
     # Process-local limiter. Multi-worker deployments need a shared Redis limiter.
     client_ip = request.client.host if request.client else "unknown"
     now = time.monotonic()
-    global _ICON_RATE_LAST_CLEANUP
-    if now - _ICON_RATE_LAST_CLEANUP >= 60:
-        cutoff = now - _ICON_RATE_CLEANUP
-        stale_ips = [
-            ip for ip, stamps in list(_ICON_RATE.items())
-            if not stamps or stamps[-1] < cutoff
-        ]
-        for ip in stale_ips:
-            _ICON_RATE.pop(ip, None)
-        _ICON_RATE_LAST_CLEANUP = now
+    _cleanup_icon_rate(now)
     bucket = [stamp for stamp in _ICON_RATE.get(client_ip, []) if now - stamp < _ICON_RATE_WINDOW]
     if len(bucket) >= _ICON_RATE_LIMIT:
         return Response(

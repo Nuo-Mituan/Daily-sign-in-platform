@@ -134,6 +134,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        modules.shutdown_icon_decode_pool()
         scheduler_service.shutdown()
         await shutdown_background_tasks()
         hub.close_all()

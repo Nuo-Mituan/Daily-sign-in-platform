@@ -324,10 +324,12 @@ def scan_modules() -> list[ScannedModule]:
     return scanned
 
 
-def _module_field_values(config: ModuleConfig) -> dict[str, Any]:
-    """Fields shared by the create and update sync paths."""
+def _module_field_values(
+    config: ModuleConfig, *, is_new: bool
+) -> dict[str, Any]:
+    """Fields shared by create/update; is_new applies creation defaults."""
     return {
-        "directory_name": config.directory_name,
+        "directory_name": config.directory_name if not is_new else None,
         "legacy_key": config.legacy_key,
         "name": config.name,
         "description": config.description,
@@ -348,11 +350,12 @@ async def _find_existing_module(
     db: AsyncSession,
     key: str,
     config: ModuleConfig,
-    scanned_keys: set[str] | None = None,
 ) -> Module | None:
     row = await db.scalar(select(Module).where(Module.key == key))
     if row is None and config.directory_name and config.legacy_key:
-        if config.legacy_key in (scanned_keys or set()):
+        # Only reject self-reference here. Other scanned directories are
+        # protected by the DB unique directory index and conflict checks.
+        if config.legacy_key == key:
             return None
         row = await db.scalar(
             select(Module).where(
@@ -370,7 +373,7 @@ def _create_module_from_config(
     row = Module(
         key=key,
         **{
-            **_module_field_values(config),
+            **_module_field_values(config, is_new=True),
             "default_cron": config.default_cron or "0 8 * * *",
             "cron": config.default_cron or "0 8 * * *",
             "start_time": config.default_start_time,
@@ -385,6 +388,7 @@ def _create_module_from_config(
             "load_error": None,
         },
     )
+    row.directory_name = config.directory_name or key
     db.add(row)
     return row
 
@@ -392,11 +396,15 @@ def _create_module_from_config(
 def _update_module_from_config(
     module: Module, config: ModuleConfig
 ) -> str | None:
-    for field, value in _module_field_values(config).items():
-        if field == "legacy_key" and value is None:
+    for field, value in _module_field_values(config, is_new=False).items():
+        if field in {"legacy_key", "directory_name"} and value is None:
             continue
         setattr(module, field, value)
-    module.directory_name = config.directory_name or module.key
+    # Preserve a manually mapped directory unless config explicitly overrides.
+    if config.directory_name is not None:
+        module.directory_name = config.directory_name
+    elif not module.directory_name:
+        module.directory_name = module.key
     module.default_cron = config.default_cron or module.default_cron or "0 8 * * *"
     if not module.start_time:
         module.start_time = config.default_start_time
@@ -424,11 +432,14 @@ def _update_module_from_config(
 async def _mark_missing_modules(
     db: AsyncSession, seen: set[str], result: SyncResult
 ) -> None:
-    rows = (await db.execute(select(Module))).scalars().all()
-    for row in rows:
-        if row.key not in seen:
-            row.load_error = "模块目录不存在或已被移除"
-            result.invalid.append((row.key, row.load_error))
+    all_keys = (await db.execute(select(Module.key))).scalars().all()
+    missing_keys = set(all_keys) - seen
+    if not missing_keys:
+        return
+    rows = await db.execute(select(Module).where(Module.key.in_(missing_keys)))
+    for row in rows.scalars():
+        row.load_error = "模块目录不存在或已被移除"
+        result.invalid.append((row.key, row.load_error))
 
 
 async def sync_modules(db: AsyncSession) -> SyncResult:
@@ -449,7 +460,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
                 f"目录名与 key 不一致，请补 legacy_key={item.key} "
                 f"或执行 python -m app.migrate_modules --map {item.key}={config.directory_name}",
             ))
-        row = await _find_existing_module(db, item.key, config, scanned_keys)
+        row = await _find_existing_module(db, item.key, config)
         if row is None:
             row = _create_module_from_config(db, item.key, config)
             result.added += 1

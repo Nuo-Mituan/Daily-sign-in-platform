@@ -25,6 +25,7 @@ class MigrationReport:
     migrated: list[dict[str, str]] = field(default_factory=list)
     skipped: list[dict[str, str]] = field(default_factory=list)
     conflicts: list[dict[str, str]] = field(default_factory=list)
+    failed: list[dict[str, str]] = field(default_factory=list)
 
 
 async def migrate_modules(
@@ -58,22 +59,29 @@ async def migrate_modules(
                          "reason": "目标目录已被其他记录占用"}
                     )
                     continue
-                before = row.directory_name
-                report.migrated.append(
-                    {"old_key": row.key, "directory": directory,
-                     "before": before, "after": directory,
-                     "matched_by": "explicit --map"}
-                )
-                if not dry_run:
+                before = {"directory_name": row.directory_name, "legacy_key": row.legacy_key}
+                if dry_run:
+                    report.migrated.append(
+                        {"old_key": row.key, "directory": directory,
+                         "before": before[ "directory_name"],
+                         "after": directory, "matched_by": "explicit --map"}
+                    )
+                    continue
+                try:
                     row.directory_name = directory
                     row.legacy_key = row.key
                     row.load_error = None
-            if not dry_run:
-                try:
                     await db.commit()
-                except Exception:
+                    report.migrated.append(
+                        {"old_key": row.key, "directory": directory,
+                         "before": before["directory_name"], "after": directory,
+                         "matched_by": "explicit --map"}
+                    )
+                except Exception as exc:
                     await db.rollback()
-                    raise
+                    report.failed.append(
+                        {"old_key": row.key, "directory": directory, "reason": str(exc)}
+                    )
             await dispose_db()
             return report
 
@@ -112,25 +120,29 @@ async def migrate_modules(
                      "reason": "目标目录已被其他记录占用"}
                 )
                 continue
-            report.migrated.append(
-                {
-                    "directory": item.key,
-                    "old_key": row.key,
-                    "before": row.directory_name,
-                    "after": item.key,
-                    "matched_by": "unique name",
-                }
-            )
-            if not dry_run:
+            before = {"directory_name": row.directory_name, "legacy_key": row.legacy_key}
+            if dry_run:
+                report.migrated.append(
+                    {"directory": item.key, "old_key": row.key,
+                     "before": before["directory_name"], "after": item.key,
+                     "matched_by": "unique name"}
+                )
+                continue
+            try:
                 row.directory_name = item.key
                 row.legacy_key = row.key
                 row.load_error = None
-        if not dry_run:
-            try:
                 await db.commit()
-            except Exception:
+                report.migrated.append(
+                    {"directory": item.key, "old_key": row.key,
+                     "before": before["directory_name"], "after": item.key,
+                     "matched_by": "unique name"}
+                )
+            except Exception as exc:
                 await db.rollback()
-                raise
+                report.failed.append(
+                    {"directory": item.key, "old_key": row.key, "reason": str(exc)}
+                )
     await dispose_db()
     return report
 
@@ -149,6 +161,7 @@ async def _main() -> None:
                 "migrated": report.migrated,
                 "skipped": report.skipped,
                 "conflicts": report.conflicts,
+                "failed": report.failed,
             },
             ensure_ascii=False,
             indent=2,
