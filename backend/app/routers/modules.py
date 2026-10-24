@@ -115,6 +115,7 @@ def _module_out(
     return ModuleOut(
         id=module.id,
         key=module.key,
+        directory_name=module.directory_name,
         name=module.name,
         description=module.description,
         author=module.author,
@@ -429,24 +430,17 @@ async def preview_schedule(payload: SchedulePreviewRequest) -> SchedulePreviewRe
     )
 
 
-# API key -> on-disk module directory. Deployments that rename module
-# directories can override this mapping; unknown keys retain the historical
-# direct-key behavior. Prefer loading this from deployment configuration for
-# large/heterogeneous installations rather than editing source code.
-KEY_TO_DIR: dict[str, str] = {
-    "demo_checkin": "ehentai_daily_login",
-}
-
-
 @router.get("/icon", summary="读取签到模块本地图标")
 async def module_icon(
     key: str = Query(min_length=1, max_length=80),
     path: str = Query(default="icon.ico", min_length=1, max_length=255),
+    db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """Serve an image from one module directory with traversal/symlink checks."""
+    """Serve a module-local icon; directory_name comes from Module metadata."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", key):
         raise HTTPException(status_code=400, detail="模块标识不合法")
-    directory = KEY_TO_DIR.get(key, key)
+    module = await db.scalar(select(Module).where(Module.key == key))
+    directory = (module.directory_name if module and module.directory_name else key)
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", directory):
         logger.warning("模块图标目录映射非法：key=%s directory=%s", key, directory)
         raise HTTPException(status_code=403, detail="图标路径不合法")
