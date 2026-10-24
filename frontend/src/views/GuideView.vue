@@ -115,6 +115,13 @@
               </tbody>
             </table>
           </div>
+          <div class="doc-callout">
+            <el-icon><InfoFilled /></el-icon>
+            <code>directory_name</code> 表示模块在 <code>modules/</code> 下的真实物理目录名；
+            不填时回退为 API key。修改目录名后重新扫描模块即可同步数据库，
+            图标接口会按该字段读取 <code>modules/&lt;directory_name&gt;/</code>。
+            该值只能包含字母、数字、下划线和短横线，禁止路径分隔符或 <code>..</code>。
+          </div>
           <pre class="code-block"><code>{{ configExample }}</code></pre>
           <div class="doc-callout">
             <el-icon><Timer /></el-icon>
@@ -364,7 +371,8 @@ const configFields = [
   { name: 'description', type: 'string', required: true, desc: '一句话说明模块用途，展示在模块卡片上。' },
   { name: 'author', type: 'string', required: false, desc: '作者或维护者名称。' },
   { name: 'version', type: 'string', required: false, desc: '模块版本号，默认 1.0.0。' },
-  { name: 'icon', type: 'string', required: false, desc: '模块图标 emoji，默认 🧩。' },
+  { name: 'icon', type: 'string', required: false, desc: '模块图标：Emoji、./favicon.ico、Base64 Data URI 或 HTTPS URL，默认 🧩。' },
+  { name: 'directory_name', type: 'string', required: false, desc: '物理模块目录名，最多 80 字符；为空时回退使用模块 key。用于 API key 与目录名独立演进。' },
   { name: 'default_start_time', type: 'string', required: true, desc: '默认开始时间 HH:mm，例如 08:00。' },
   { name: 'default_end_time', type: 'string', required: true, desc: '默认结束时间 HH:mm，例如 10:00。' },
   { name: 'default_repeat_cycle', type: 'string', required: false, desc: 'daily / weekly / monthly_15 / monthly / yearly。' },
@@ -397,7 +405,7 @@ const paramTypes = [
 ]
 
 const structureExample = `modules/
-├── demo_checkin/              # 模块目录名 = 模块标识 key
+├── demo_checkin/              # 物理目录；可由 config.json 的 directory_name 指向
 │   ├── config.json            # 元信息、参数定义、随机时间默认值
 │   ├── main.py                # 入口：async def run(params)
 │   └── helpers.py             # 可选：模块内辅助文件
@@ -411,6 +419,7 @@ const configExample = `{
   "author": "your-name",
   "version": "1.0.0",
   "icon": "🎯",
+  "directory_name": "my_checkin",
   "default_start_time": "08:00",
   "default_end_time": "10:00",
   "default_repeat_cycle": "daily",
