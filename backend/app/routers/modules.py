@@ -13,7 +13,8 @@ import shutil
 import time
 import uuid
 from collections import OrderedDict
-from threading import Lock
+from threading import Event, Lock
+from weakref import WeakSet
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
@@ -494,7 +495,6 @@ _ICON_RATE_CLEANUP = 120.0
 _ICON_RATE_LIMIT = 120
 _ICON_RATE_LAST_CLEANUP = 0.0
 _ICON_DECODE_LOCK = asyncio.Lock()
-# Dedicated pool for icon decode only; tune max_workers per deployment.
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, str(default))
     try:
@@ -513,26 +513,65 @@ def _env_float(name: str, default: float) -> float:
         raise ValueError(f"{name} must be a number, got {raw!r}") from exc
 
 
-_ICON_DECODE_POOL_SIZE = _env_int("ICON_DECODE_POOL_SIZE", 4)
-_ICON_DECODE_POOL_MAX = _env_int("ICON_DECODE_POOL_MAX", 16)
-_ICON_DECODE_TIMEOUT = _env_float("ICON_DECODE_TIMEOUT", 10.0)
+# Dedicated pool for icon decode only; values are validated lazily on first use.
+_ICON_DECODE_POOL_SIZE = 4
+_ICON_DECODE_POOL_MAX = 16
+_ICON_DECODE_TIMEOUT = 10.0
+_ICON_CONFIG_INITIALIZED = False
+_ACTIVE_ICON_EVENTS: "WeakSet[Event]" = WeakSet()
 _ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
-    max_workers=max(1, min(_ICON_DECODE_POOL_SIZE, _ICON_DECODE_POOL_MAX))
+    max_workers=_ICON_DECODE_POOL_SIZE
 )
 
 
-def shutdown_icon_decode_pool() -> None:
-    """Release the dedicated icon decoder pool during application shutdown."""
-    try:
-        # ThreadPoolExecutor.shutdown has no timeout parameter in Python 3.10+.
-        # Stop accepting work, then wait for worker threads with a bounded join.
+def _load_icon_config() -> None:
+    """Parse icon pool env vars on first use, never during module import."""
+    global _ICON_DECODE_POOL_SIZE, _ICON_DECODE_POOL_MAX
+    global _ICON_DECODE_TIMEOUT, _ICON_CONFIG_INITIALIZED, _ICON_DECODE_POOL
+    if _ICON_CONFIG_INITIALIZED:
+        return
+    size = _env_int("ICON_DECODE_POOL_SIZE", 4)
+    maximum = _env_int("ICON_DECODE_POOL_MAX", 16)
+    timeout = _env_float("ICON_DECODE_TIMEOUT", 10.0)
+    new_size = max(1, min(size, maximum))
+    if new_size != _ICON_DECODE_POOL_SIZE:
         _ICON_DECODE_POOL.shutdown(wait=False, cancel_futures=True)
-        for worker in getattr(_ICON_DECODE_POOL, "_threads", []):
-            worker.join(timeout=10)
-            if worker.is_alive():
-                logger.warning("图标解码线程未在超时内退出")
+        _ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
+            max_workers=new_size
+        )
+    _ICON_DECODE_POOL_SIZE = new_size
+    _ICON_DECODE_POOL_MAX = maximum
+    _ICON_DECODE_TIMEOUT = timeout
+    _ICON_CONFIG_INITIALIZED = True
+
+
+def _tracked_load_icon(candidate: Path) -> tuple[bytes, str, int]:
+    """Run a decode while publishing a completion event for shutdown."""
+    event = Event()
+    _ACTIVE_ICON_EVENTS.add(event)
+    try:
+        return load_icon(candidate)
+    finally:
+        event.set()
+        _ACTIVE_ICON_EVENTS.discard(event)
+
+
+def shutdown_icon_decode_pool() -> None:
+    """Stop accepting work and wait for tracked decode events."""
+    try:
+        _ICON_DECODE_POOL.shutdown(wait=False, cancel_futures=True)
+        events = list(_ACTIVE_ICON_EVENTS)
+        if not events:
+            logger.warning("图标解码线程池关闭时没有活动任务")
+        for event in events:
+            if not event.wait(timeout=5):
+                logger.warning("图标解码任务未在超时内退出，强制结束线程池")
+            event.set()
+        _ACTIVE_ICON_EVENTS.clear()
     except Exception:
         logger.warning("图标解码线程池关闭失败", exc_info=True)
+
+
 _ICON_CACHE: "OrderedDict[tuple[str, int], tuple[bytes, str, float]]" = OrderedDict()
 _ICON_CACHE_TTL = 60.0
 _ICON_CACHE_MAX = 128
@@ -643,6 +682,7 @@ async def module_icon(
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
+    _load_icon_config()
     try:
         async with _ICON_DECODE_LOCK:
             cached = _cache_get(cache_key)
@@ -653,7 +693,7 @@ async def module_icon(
                 data, media_type, mtime_ns = await asyncio.wait_for(
                     loop.run_in_executor(
                         _ICON_DECODE_POOL,
-                        load_icon,
+                        _tracked_load_icon,
                         candidate,
                     ),
                     timeout=_ICON_DECODE_TIMEOUT,

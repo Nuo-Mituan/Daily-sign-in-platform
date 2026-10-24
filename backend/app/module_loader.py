@@ -22,6 +22,7 @@ from types import ModuleType
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -382,6 +383,11 @@ async def _find_existing_module(
     return row
 
 
+# Fields whose None value means "keep the database value". Adding a new
+# nullable identity/mapping field requires adding it here and updating tests.
+_SKIP_NONE_FIELDS = frozenset({"legacy_key", "directory_name"})
+
+
 def _apply_field_values(module: Module, values: dict[str, Any]) -> None:
     """Apply config fields; None legacy_key/directory_name are skipped.
 
@@ -389,7 +395,7 @@ def _apply_field_values(module: Module, values: dict[str, Any]) -> None:
     truth). This preserves manually mapped directory/legacy credentials.
     """
     for field, value in values.items():
-        if value is None and field in {"legacy_key", "directory_name"}:
+        if value is None and field in _SKIP_NONE_FIELDS:
             continue
         setattr(module, field, value)
 
@@ -421,6 +427,22 @@ def _create_module_from_config(
         },
     )
     db.add(row)
+    return row
+
+
+async def _create_or_get_module(
+    db: AsyncSession, key: str, config: ModuleConfig
+) -> Module | None:
+    """Create a module idempotently; on unique conflict reuse the existing row."""
+    row = _create_module_from_config(db, key, config)
+    try:
+        async with db.begin_nested():
+            await db.flush()
+    except IntegrityError:
+        logger.warning("模块 %s 并发创建冲突，尝试复用已有记录", key)
+        row = await _find_existing_module(db, key, config)
+        if row is None:
+            logger.error("模块 %s 创建冲突且无法找到已有记录，跳过", key)
     return row
 
 
@@ -494,7 +516,9 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             ))
         row = await _find_existing_module(db, item.key, config)
         if row is None:
-            row = _create_module_from_config(db, item.key, config)
+            row = await _create_or_get_module(db, item.key, config)
+            if row is None:
+                continue
             result.added += 1
         else:
             error = _update_module_from_config(row, config)
