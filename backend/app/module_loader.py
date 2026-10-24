@@ -325,11 +325,32 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
 
         config = item.config
         schema = [param.model_dump(mode="json") for param in config.params]
+        desired_directory = config.directory_name or item.path.name
         row = existing.get(item.key)
+
+        # A directory can be renamed independently of its API key. If the
+        # physical directory is new but an unlinked DB row has the same
+        # configured display name, adopt that row and preserve its API key.
+        if row is None and config.directory_name:
+            candidates = [
+                candidate
+                for candidate in existing.values()
+                if candidate.key not in seen
+                and candidate.directory_name is None
+                and candidate.name == config.name
+            ]
+            if len(candidates) == 1:
+                row = candidates[0]
+                logger.info(
+                    "模块目录 %s 复用 API key %s（名称匹配）",
+                    item.path.name,
+                    row.key,
+                )
+
         if row is None:
             row = Module(
                 key=item.key,
-                directory_name=config.directory_name or item.path.name,
+                directory_name=desired_directory,
                 name=config.name,
                 description=config.description,
                 author=config.author,
@@ -358,7 +379,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             db.add(row)
             result.added += 1
         else:
-            row.directory_name = config.directory_name or item.path.name
+            row.directory_name = desired_directory
             row.name = config.name
             row.description = config.description
             row.author = config.author
@@ -403,6 +424,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             row.load_error = None
             result.updated += 1
         result.modules.append(row)
+        seen.add(row.key)
 
     for key, row in existing.items():
         if key in seen:
