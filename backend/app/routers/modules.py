@@ -495,15 +495,25 @@ _ICON_RATE_LAST_CLEANUP = 0.0
 _ICON_DECODE_LOCK = asyncio.Lock()
 # Dedicated pool for icon decode only; tune max_workers per deployment.
 _ICON_DECODE_POOL_SIZE = int(os.getenv("ICON_DECODE_POOL_SIZE", "4"))
+_ICON_DECODE_POOL_MAX = int(os.getenv("ICON_DECODE_POOL_MAX", "16"))
 _ICON_DECODE_TIMEOUT = float(os.getenv("ICON_DECODE_TIMEOUT", "10.0"))
 _ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
-    max_workers=max(1, min(_ICON_DECODE_POOL_SIZE, 4))
+    max_workers=max(1, min(_ICON_DECODE_POOL_SIZE, _ICON_DECODE_POOL_MAX))
 )
 
 
 def shutdown_icon_decode_pool() -> None:
     """Release the dedicated icon decoder pool during application shutdown."""
-    _ICON_DECODE_POOL.shutdown(wait=False)
+    try:
+        # ThreadPoolExecutor.shutdown has no timeout parameter in Python 3.10+.
+        # Stop accepting work, then wait for worker threads with a bounded join.
+        _ICON_DECODE_POOL.shutdown(wait=False, cancel_futures=True)
+        for worker in getattr(_ICON_DECODE_POOL, "_threads", []):
+            worker.join(timeout=10)
+            if worker.is_alive():
+                logger.warning("图标解码线程未在超时内退出")
+    except Exception:
+        logger.warning("图标解码线程池关闭失败", exc_info=True)
 _ICON_CACHE: "OrderedDict[tuple[str, int], tuple[bytes, str, float]]" = OrderedDict()
 _ICON_CACHE_TTL = 60.0
 _ICON_CACHE_MAX = 128
@@ -620,8 +630,14 @@ async def module_icon(
             if cached is not None:
                 data, media_type = cached
             else:
+                loop = asyncio.get_running_loop()
                 data, media_type, mtime_ns = await asyncio.wait_for(
-                    asyncio.to_thread(load_icon, candidate), timeout=10.0
+                    loop.run_in_executor(
+                        _ICON_DECODE_POOL,
+                        load_icon,
+                        candidate,
+                    ),
+                    timeout=_ICON_DECODE_TIMEOUT,
                 )
                 cache_key = (str(candidate.resolve()), mtime_ns)
                 _cache_put(cache_key, data, media_type)

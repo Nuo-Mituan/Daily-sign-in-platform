@@ -325,11 +325,11 @@ def scan_modules() -> list[ScannedModule]:
 
 
 def _module_field_values(
-    config: ModuleConfig, *, is_new: bool
+    config: ModuleConfig, *, is_new: bool = False
 ) -> dict[str, Any]:
     """Fields shared by create/update; is_new applies creation defaults."""
     return {
-        "directory_name": config.directory_name if not is_new else None,
+        "directory_name": config.directory_name,
         "legacy_key": config.legacy_key,
         "name": config.name,
         "description": config.description,
@@ -351,6 +351,12 @@ async def _find_existing_module(
     key: str,
     config: ModuleConfig,
 ) -> Module | None:
+    """Find a row by scanned key, then by explicit legacy_key.
+
+    ``config`` comes from the scanned physical directory's config.json. The
+    legacy lookup intentionally only accepts a row whose directory_name is
+    still NULL, so a mapped directory is never silently rebound.
+    """
     row = await db.scalar(select(Module).where(Module.key == key))
     if row is None and config.directory_name and config.legacy_key:
         # Only reject self-reference here. Other scanned directories are
@@ -366,14 +372,23 @@ async def _find_existing_module(
     return row
 
 
+def _apply_field_values(module: Module, values: dict[str, Any]) -> None:
+    for field, value in values.items():
+        if value is None and field in {"legacy_key", "directory_name"}:
+            continue
+        setattr(module, field, value)
+
+
 def _create_module_from_config(
     db: AsyncSession, key: str, config: ModuleConfig
 ) -> Module:
     schema = [param.model_dump(mode="json") for param in config.params]
+    field_values = _module_field_values(config, is_new=True)
+    field_values["directory_name"] = config.directory_name or key
     row = Module(
         key=key,
         **{
-            **_module_field_values(config, is_new=True),
+            **field_values,
             "default_cron": config.default_cron or "0 8 * * *",
             "cron": config.default_cron or "0 8 * * *",
             "start_time": config.default_start_time,
@@ -388,7 +403,6 @@ def _create_module_from_config(
             "load_error": None,
         },
     )
-    row.directory_name = config.directory_name or key
     db.add(row)
     return row
 
@@ -396,10 +410,7 @@ def _create_module_from_config(
 def _update_module_from_config(
     module: Module, config: ModuleConfig
 ) -> str | None:
-    for field, value in _module_field_values(config, is_new=False).items():
-        if field in {"legacy_key", "directory_name"} and value is None:
-            continue
-        setattr(module, field, value)
+    _apply_field_values(module, _module_field_values(config, is_new=False))
     # Preserve a manually mapped directory unless config explicitly overrides.
     if config.directory_name is not None:
         module.directory_name = config.directory_name
