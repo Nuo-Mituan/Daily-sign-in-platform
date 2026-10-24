@@ -8,6 +8,7 @@ A module is a directory inside MODULES_DIR containing:
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import logging
@@ -58,7 +59,11 @@ MAX_PARAMS = 60
 MAX_ACCOUNTS = 50
 
 
-class ModuleConfigError(ValueError):
+class ModuleError(Exception):
+    """Raised when a module cannot be created or reconciled safely."""
+
+
+class ModuleConfigError(ModuleError, ValueError):
     """Raised for invalid module folders or config files."""
 
 
@@ -432,17 +437,27 @@ def _create_module_from_config(
 
 async def _create_or_get_module(
     db: AsyncSession, key: str, config: ModuleConfig
-) -> Module | None:
-    """Create a module idempotently; on unique conflict reuse the existing row."""
+) -> Module:
+    """Create or get a module idempotently.
+
+    On a unique-key conflict (concurrent upload/scan), wait briefly and retry
+    the exact key lookup. If the row still does not exist, raise ModuleError so
+    the caller can report the upload failure instead of silently skipping it.
+    """
     row = _create_module_from_config(db, key, config)
     try:
         async with db.begin_nested():
             await db.flush()
     except IntegrityError:
         logger.warning("模块 %s 并发创建冲突，尝试复用已有记录", key)
-        row = await _find_existing_module(db, key, config)
+        await db.rollback()
+        await asyncio.sleep(0.05)
+        row = await db.scalar(select(Module).where(Module.key == key))
         if row is None:
-            logger.error("模块 %s 创建冲突且无法找到已有记录，跳过", key)
+            logger.error("模块 %s 创建冲突且重试后仍不存在", key)
+            raise ModuleError(
+                f"模块 {key} 并发创建冲突，请重新扫描或重试上传"
+            ) from None
     return row
 
 
@@ -516,8 +531,11 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             ))
         row = await _find_existing_module(db, item.key, config)
         if row is None:
-            row = await _create_or_get_module(db, item.key, config)
-            if row is None:
+            try:
+                row = await _create_or_get_module(db, item.key, config)
+            except ModuleError as exc:
+                logger.error("模块 %s 同步创建失败：%s", item.key, exc)
+                result.invalid.append((item.key, str(exc)))
                 continue
             result.added += 1
         else:

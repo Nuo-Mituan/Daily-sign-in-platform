@@ -513,40 +513,60 @@ def _env_float(name: str, default: float) -> float:
         raise ValueError(f"{name} must be a number, got {raw!r}") from exc
 
 
-# Dedicated pool for icon decode only; values are validated lazily on first use.
+# Icon decode configuration is loaded lazily on first icon request so that
+# importing this module never validates environment variables. Supported vars:
+# ICON_DECODE_POOL_SIZE (4), ICON_DECODE_POOL_MAX (16),
+# ICON_DECODE_TIMEOUT (10.0). Runtime changes require a service restart.
+# TODO: support hot reload through an explicit settings endpoint.
 _ICON_DECODE_POOL_SIZE = 4
 _ICON_DECODE_POOL_MAX = 16
 _ICON_DECODE_TIMEOUT = 10.0
 _ICON_CONFIG_INITIALIZED = False
+_ICON_CONFIG_LOCK = Lock()
 _ACTIVE_ICON_EVENTS: "WeakSet[Event]" = WeakSet()
-_ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
-    max_workers=_ICON_DECODE_POOL_SIZE
-)
+_ICON_DECODE_POOL: concurrent.futures.ThreadPoolExecutor | None = None
 
 
 def _load_icon_config() -> None:
-    """Parse icon pool env vars on first use, never during module import."""
+    """Load icon pool env vars once, on first request.
+
+    Environment changes after the first call do not take effect; restart the
+    service to apply new values.
+    """
     global _ICON_DECODE_POOL_SIZE, _ICON_DECODE_POOL_MAX
     global _ICON_DECODE_TIMEOUT, _ICON_CONFIG_INITIALIZED, _ICON_DECODE_POOL
     if _ICON_CONFIG_INITIALIZED:
         return
-    size = _env_int("ICON_DECODE_POOL_SIZE", 4)
-    maximum = _env_int("ICON_DECODE_POOL_MAX", 16)
-    timeout = _env_float("ICON_DECODE_TIMEOUT", 10.0)
-    new_size = max(1, min(size, maximum))
-    if new_size != _ICON_DECODE_POOL_SIZE:
-        _ICON_DECODE_POOL.shutdown(wait=False, cancel_futures=True)
-        _ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
-            max_workers=new_size
-        )
-    _ICON_DECODE_POOL_SIZE = new_size
-    _ICON_DECODE_POOL_MAX = maximum
-    _ICON_DECODE_TIMEOUT = timeout
-    _ICON_CONFIG_INITIALIZED = True
+    with _ICON_CONFIG_LOCK:
+        if _ICON_CONFIG_INITIALIZED:
+            return
+        size = _env_int("ICON_DECODE_POOL_SIZE", 4)
+        maximum = _env_int("ICON_DECODE_POOL_MAX", 16)
+        timeout = _env_float("ICON_DECODE_TIMEOUT", 10.0)
+        new_size = max(1, min(size, maximum))
+        if _ICON_DECODE_POOL is None:
+            _ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
+                max_workers=new_size
+            )
+        _ICON_DECODE_POOL_SIZE = new_size
+        _ICON_DECODE_POOL_MAX = maximum
+        _ICON_DECODE_TIMEOUT = timeout
+        _ICON_CONFIG_INITIALIZED = True
+
+
+def _get_icon_decode_pool() -> concurrent.futures.ThreadPoolExecutor:
+    _load_icon_config()
+    if _ICON_DECODE_POOL is None:
+        raise RuntimeError("图标解码线程池未初始化")
+    return _ICON_DECODE_POOL
 
 
 def _tracked_load_icon(candidate: Path) -> tuple[bytes, str, int]:
-    """Run a decode while publishing a completion event for shutdown."""
+    """Run a decode while publishing a completion event for shutdown.
+
+    Event allocation is cheap relative to icon decoding and is bounded by
+    concurrent decode requests; no object pooling is needed at this volume.
+    """
     event = Event()
     _ACTIVE_ICON_EVENTS.add(event)
     try:
@@ -559,7 +579,11 @@ def _tracked_load_icon(candidate: Path) -> tuple[bytes, str, int]:
 def shutdown_icon_decode_pool() -> None:
     """Stop accepting work and wait for tracked decode events."""
     try:
-        _ICON_DECODE_POOL.shutdown(wait=False, cancel_futures=True)
+        pool = _ICON_DECODE_POOL
+        if pool is None:
+            logger.warning("图标解码线程池尚未创建，无需关闭")
+            return
+        pool.shutdown(wait=False, cancel_futures=True)
         events = list(_ACTIVE_ICON_EVENTS)
         if not events:
             logger.warning("图标解码线程池关闭时没有活动任务")
@@ -682,7 +706,7 @@ async def module_icon(
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
-    _load_icon_config()
+    pool = _get_icon_decode_pool()
     try:
         async with _ICON_DECODE_LOCK:
             cached = _cache_get(cache_key)
@@ -692,7 +716,7 @@ async def module_icon(
                 loop = asyncio.get_running_loop()
                 data, media_type, mtime_ns = await asyncio.wait_for(
                     loop.run_in_executor(
-                        _ICON_DECODE_POOL,
+                        pool,
                         _tracked_load_icon,
                         candidate,
                     ),
