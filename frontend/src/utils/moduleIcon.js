@@ -53,3 +53,8 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
 export function isImageContentType(value = '') {
   return /^image\//i.test(String(value))
 }
+
+export function moduleIconUrl(key, path = 'icon.ico') {
+  const base = String(import.meta.env?.VITE_API_BASE || '/api').replace(/\/+$/, '')
+  return `${base}/modules/icon?key=${encodeURIComponent(key)}&path=${encodeURIComponent(path)}`
+}

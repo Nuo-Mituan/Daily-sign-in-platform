@@ -19,8 +19,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { modulesApi } from '@/api'
-import { classifyModuleIcon, isImageContentType } from '@/utils/moduleIcon'
+import { classifyModuleIcon, isImageContentType, moduleIconUrl } from '@/utils/moduleIcon'
 
 const props = defineProps({
   icon: { type: String, default: '🧩' },
@@ -51,7 +50,7 @@ async function loadLocalIcon(kind) {
   failed.value = false
   try {
     const response = await fetch(
-      modulesApi.iconUrl(props.moduleKey, kind.path),
+      moduleIconUrl(props.moduleKey, kind.path),
       { credentials: 'include', cache: 'no-store' },
     )
     if (!response.ok) {
