@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
+import uuid
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +20,7 @@ from ..config import settings
 from ..crypto import EncryptionContext, ParameterDecryptionError, parameter_cipher
 from ..database import get_db
 from ..deps import AuthContext, get_auth_context, get_current_user
-from ..models import ExecutionLog, Module, ModuleSchedule, User
+from ..models import ExecutionLog, Module, ModuleSchedule, PushPool, User
 from ..module_loader import (
     get_module_physical_path,
     ModuleConfig,
@@ -72,7 +74,6 @@ from ..services.module_query_service import (
 from ..services.module_upload import (
     ModuleUploadError,
     install_module_upload,
-    remove_module_directory,
 )
 from ..services.schedules import (
     cancel_pending_for_module,
@@ -774,29 +775,72 @@ async def test_module_now(
     return RunResponse(log_id=log_id, message="测试执行已触发，请查看执行日志")
 
 
-@router.delete("/{module_id}", response_model=MessageResponse, summary="删除模块")
+@router.delete("/{module_id}", response_model=MessageResponse, summary="彻底删除模块")
 async def delete_module(
-    module_id: int,
+    module_id: str,
     delete_files: bool = Query(default=True, description="同时删除模块目录"),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    module = await _get_module_or_404(db, module_id)
-    if execution.is_module_running(module_id):
+    """Hard-delete a module, its physical directory and dependent rows.
+
+    The directory is first renamed to a hidden trash path so a DB failure can
+    restore it. Soft deletion is intentionally reserved for sync_modules().
+    """
+    if module_id.isdigit():
+        module = await db.get(Module, int(module_id))
+    else:
+        module = await db.scalar(select(Module).where(Module.key == module_id))
+    if module is None:
+        raise HTTPException(status_code=404, detail="模块不存在")
+    if execution.is_module_running(module.id):
         raise HTTPException(status_code=409, detail="模块正在执行，请等待结束后再删除")
 
-    scheduler_service.unschedule_module(module_id)
+    scheduler_service.unschedule_module(module.id)
     key = module.key
     name = module.name
-    if delete_files:
-        try:
-            remove_module_directory(module.directory_name or key)
-        except (ModuleUploadError, ModuleConfigError, OSError) as exc:
-            raise HTTPException(status_code=500, detail=f"删除模块文件失败：{exc}") from exc
+    trash_path: Path | None = None
+    physical_path: Path | None = None
 
-    await db.execute(delete(ExecutionLog).where(ExecutionLog.module_id == module_id))
-    await db.execute(delete(ModuleSchedule).where(ModuleSchedule.module_id == module_id))
-    await db.delete(module)
-    await db.commit()
+    if delete_files:
+        physical_path = get_module_physical_path(module).resolve()
+        root = settings.modules_dir.resolve()
+        if not physical_path.is_relative_to(root) or physical_path.is_symlink():
+            raise HTTPException(status_code=403, detail="模块目录路径不合法")
+        if physical_path.exists():
+            trash_path = physical_path.parent / f".trash-{key}-{uuid.uuid4().hex[:8]}"
+            try:
+                physical_path.rename(trash_path)
+            except OSError as exc:
+                logger.exception("模块目录暂存失败：key=%s", key)
+                raise HTTPException(status_code=500, detail="无法移动模块目录，删除已取消") from exc
+
+    try:
+        await db.execute(delete(ExecutionLog).where(ExecutionLog.module_id == module.id))
+        await db.execute(delete(ModuleSchedule).where(ModuleSchedule.module_id == module.id))
+        await db.execute(delete(PushPool).where(PushPool.module_id == module.id))
+        await db.delete(module)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        if trash_path is not None and trash_path.exists() and physical_path is not None:
+            try:
+                trash_path.rename(physical_path)
+            except OSError:
+                logger.exception("数据库删除失败且无法恢复模块目录：%s", trash_path)
+        logger.exception("模块硬删除失败：key=%s", key)
+        raise HTTPException(status_code=500, detail="数据库删除失败，模块目录已保留") from None
+
+    cleanup_failed = False
+    if trash_path is not None:
+        try:
+            shutil.rmtree(trash_path)
+        except OSError:
+            cleanup_failed = True
+            logger.exception("模块数据库已删除，但物理目录清理失败：%s", trash_path)
+
     remaining = await _load_modules(db)
     await scheduler_service.reconcile(remaining)
-    return MessageResponse(message=f"模块「{name}」已删除")
+    message = f"模块「{name}」已彻底删除"
+    if cleanup_failed:
+        message += "；数据库记录已删除，但临时目录需手动清理，请查看服务日志"
+    return MessageResponse(message=message)

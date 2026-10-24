@@ -109,7 +109,7 @@
         @click="goDetail(module)"
       >
         <div class="card-top">
-          <ModuleIcon :icon="module.icon" :size="48" :tone="index + module.id" />
+          <ModuleIcon :icon="module.icon" :source="module.icon_source" :icon-data="module.icon_data" :module-key="module.key" :size="48" :tone="index + module.id" />
           <div class="card-heading">
             <div class="card-title-line">
               <h2 :title="module.name">{{ module.name }}</h2>
@@ -227,7 +227,7 @@
                 </el-dropdown-item>
                 <el-dropdown-item command="delete" divided>
                   <el-icon><Delete /></el-icon>
-                  删除模块
+                  彻底删除
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -498,10 +498,10 @@ async function handleCardCommand(command, module) {
 async function deleteModule(module) {
   try {
     await ElMessageBox.confirm(
-      `删除「${module.name}」会同时删除 modules/${module.key} 目录和全部历史日志，且不可恢复。\n确定继续吗？`,
-      '删除模块',
+      `彻底删除「${module.name}」会移除 modules/${module.directory_name || module.key} 目录、数据库记录和全部历史日志，且不可恢复。\n确定继续吗？`,
+      '彻底删除模块',
       {
-        confirmButtonText: '确认删除',
+        confirmButtonText: '彻底删除',
         cancelButtonText: '取消',
         type: 'warning',
         confirmButtonClass: 'danger-confirm',

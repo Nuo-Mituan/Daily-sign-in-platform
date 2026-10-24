@@ -32,7 +32,7 @@
       <section class="module-hero">
         <div class="hero-accent"></div>
         <div class="hero-left">
-          <ModuleIcon :icon="module.icon" :size="68" :tone="module.id" />
+          <ModuleIcon :icon="module.icon" :source="module.icon_source" :icon-data="module.icon_data" :module-key="module.key" :size="68" :tone="module.id" />
           <div class="hero-copy">
             <div class="hero-title-line">
               <h1>{{ module.name }}</h1>
@@ -93,7 +93,7 @@
                 </el-dropdown-item>
                 <el-dropdown-item command="delete" divided>
                   <el-icon><Delete /></el-icon>
-                  删除模块
+                  彻底删除
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -891,10 +891,10 @@ async function handleHeaderCommand(command) {
 async function deleteModule() {
   try {
     await ElMessageBox.confirm(
-      `删除「${module.value.name}」会同时移除 modules/${module.value.key} 目录和全部历史日志，且不可恢复。\n确定继续吗？`,
-      '删除模块',
+      `彻底删除「${module.value.name}」会移除 modules/${module.value.directory_name || module.value.key} 目录、数据库记录和全部历史日志，且不可恢复。\n确定继续吗？`,
+      '彻底删除模块',
       {
-        confirmButtonText: '确认删除',
+        confirmButtonText: '彻底删除',
         cancelButtonText: '取消',
         type: 'warning',
       },
