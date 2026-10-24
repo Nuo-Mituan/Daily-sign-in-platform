@@ -72,6 +72,7 @@ class ModuleOut(BaseModel):
     key: str
     directory_name: str | None = None
     legacy_key: str | None = None
+    physical_directory: str | None = None
     migration_status: str = "ok"
     name: str
     description: str

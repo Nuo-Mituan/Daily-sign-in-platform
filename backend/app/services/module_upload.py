@@ -128,7 +128,7 @@ def _install_zip_sync(
 
     temp_root: Path | None = None
     backup_path: Path | None = None
-    target: Path | None = None
+    target: Path = modules_dir
     try:
         with zf:
             files = _validate_archive(zf)
@@ -146,11 +146,12 @@ def _install_zip_sync(
             physical_directory = validate_module_key(directory_name or key)
             target = modules_dir / physical_directory
             key_directory = modules_dir / key
-            if (
-                physical_directory != key
-                and key_directory.exists()
-                and target.exists()
-            ):
+            if physical_directory != key and key_directory.exists():
+                if not target.exists():
+                    raise ModuleUploadError(
+                        f"检测到 key 目录 modules/{key} 仍存在，但物理目录 "
+                        f"modules/{physical_directory} 不存在；请先清理残留目录"
+                    )
                 raise ModuleUploadError(
                     f"模块标识「{key}」与物理目录「{physical_directory}」同时存在，"
                     "请先清理冲突目录"
@@ -198,8 +199,9 @@ def _install_zip_sync(
         config = parse_config_file(temp_root / "config.json")
 
         if target.exists():
-            backup_path = modules_dir / f".backup-{physical_directory}-{secrets.token_hex(4)}"
-            os.replace(target, backup_path)
+            backup = modules_dir / f".backup-{physical_directory}-{secrets.token_hex(4)}"
+            backup_path = backup
+            os.replace(target, backup)
         try:
             os.replace(temp_root, target)
             temp_root = None

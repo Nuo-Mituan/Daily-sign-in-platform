@@ -8,6 +8,8 @@ import re
 import shutil
 import time
 import uuid
+from collections import OrderedDict
+from threading import Lock
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +25,10 @@ from ..crypto import EncryptionContext, ParameterDecryptionError, parameter_ciph
 from ..database import get_db
 from ..deps import AuthContext, get_auth_context, get_current_user
 from ..models import ExecutionLog, Module, ModuleSchedule, PushPool, User
+from ..services.module_icon import (
+    ModuleIconError,
+    load_icon,
+)
 from ..module_loader import (
     get_module_physical_path,
     ModuleConfig,
@@ -115,6 +121,15 @@ def _schedule_fields(module: Module) -> tuple[str, str, str, str]:
     return start, end, cycle, sub or ""
 
 
+def _migration_status(module: Module) -> str:
+    physical = module.directory_name or module.key
+    if not module.directory_name:
+        return "needs_legacy_key"
+    if physical != module.key or not (settings.modules_dir / physical).is_dir():
+        return "directory_mismatch"
+    return "ok"
+
+
 def _module_out(
     module: Module,
     schedule: ModuleSchedule | None,
@@ -128,9 +143,8 @@ def _module_out(
         key=module.key,
         directory_name=module.directory_name,
         legacy_key=module.legacy_key,
-        migration_status=(
-            "ok" if module.directory_name else "needs_legacy_key"
-        ),
+        physical_directory=(module.directory_name or module.key),
+        migration_status=_migration_status(module),
         name=module.name,
         description=module.description,
         author=module.author,
@@ -382,6 +396,21 @@ async def upload_module(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         existing = await db.scalar(select(Module).where(Module.key == requested_key))
         directory_name = existing.directory_name if existing else None
+        if directory_name:
+            conflict = await db.scalar(
+                select(Module).where(
+                    Module.directory_name == directory_name,
+                    Module.key != requested_key,
+                )
+            )
+            if conflict is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"物理目录 {directory_name} 已被模块 {conflict.key} 占用，"
+                        "禁止多个模块共享同一目录"
+                    ),
+                )
     try:
         key, _config = await install_module_upload(
             file, name, overwrite, directory_name
@@ -456,8 +485,33 @@ async def preview_schedule(payload: SchedulePreviewRequest) -> SchedulePreviewRe
 
 
 _ICON_RATE: dict[str, list[float]] = {}
-_ICON_CACHE: dict[tuple[str, str, int], tuple[bytes, str, float]] = {}
+_ICON_RATE_WINDOW = 60.0
+_ICON_RATE_CLEANUP = 300.0
+_ICON_RATE_LIMIT = 120
+_ICON_CACHE: "OrderedDict[tuple[str, int], tuple[bytes, str, float]]" = OrderedDict()
 _ICON_CACHE_TTL = 60.0
+_ICON_CACHE_MAX = 128
+_ICON_CACHE_LOCK = Lock()
+
+
+def _cache_get(cache_key: tuple[str, int]) -> tuple[bytes, str] | None:
+    with _ICON_CACHE_LOCK:
+        cached = _ICON_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        if time.monotonic() - cached[2] >= _ICON_CACHE_TTL:
+            _ICON_CACHE.pop(cache_key, None)
+            return None
+        _ICON_CACHE.move_to_end(cache_key)
+        return cached[0], cached[1]
+
+
+def _cache_put(cache_key: tuple[str, int], data: bytes, media_type: str) -> None:
+    with _ICON_CACHE_LOCK:
+        _ICON_CACHE[cache_key] = (data, media_type, time.monotonic())
+        _ICON_CACHE.move_to_end(cache_key)
+        while len(_ICON_CACHE) > _ICON_CACHE_MAX:
+            _ICON_CACHE.popitem(last=False)
 
 
 @public_router.get("/icon", summary="读取签到模块本地图标")
@@ -468,20 +522,40 @@ async def module_icon(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Serve a module-local icon; directory_name comes from Module metadata."""
+    # Process-local limiter. Multi-worker deployments need a shared Redis limiter.
     client_ip = request.client.host if request.client else "unknown"
     now = time.monotonic()
-    bucket = [stamp for stamp in _ICON_RATE.get(client_ip, []) if now - stamp < 60]
-    if len(bucket) >= 120:
-        raise HTTPException(status_code=429, detail="图标请求过于频繁")
+    if len(_ICON_RATE) > 1024:
+        cutoff = now - _ICON_RATE_CLEANUP
+        for stale_ip in [
+            ip for ip, stamps in _ICON_RATE.items()
+            if not stamps or stamps[-1] < cutoff
+        ]:
+            _ICON_RATE.pop(stale_ip, None)
+    bucket = [stamp for stamp in _ICON_RATE.get(client_ip, []) if now - stamp < _ICON_RATE_WINDOW]
+    if len(bucket) >= _ICON_RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="图标请求过于频繁",
+            headers={"Retry-After": "60"},
+        )
     bucket.append(now)
     _ICON_RATE[client_ip] = bucket
+
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", key):
         raise HTTPException(status_code=400, detail="模块标识不合法")
     module = await db.scalar(select(Module).where(Module.key == key))
-    directory = (module.directory_name if module and module.directory_name else key)
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", directory):
-        logger.warning("模块图标目录映射非法：key=%s directory=%s", key, directory)
-        raise HTTPException(status_code=403, detail="图标路径不合法")
+    directory = module.directory_name if module and module.directory_name else key
+    try:
+        validate_module_key(directory)
+    except ModuleConfigError as exc:
+        logger.warning(
+            "模块图标目录映射非法：key=%s directory=%r", key, directory
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"模块 {key} 的 directory_name={directory!r} 不合法：{exc}",
+        ) from exc
     if "\x00" in path or "\\" in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="图标路径不合法")
     from pathlib import PurePosixPath
@@ -498,99 +572,29 @@ async def module_icon(
     if not candidate.is_relative_to(module_root):
         logger.warning("拒绝模块图标路径越界：%s/%s", key, path)
         raise HTTPException(status_code=403, detail="图标路径不合法")
+
     try:
-        size, mtime_ns = await asyncio.to_thread(
-            lambda: (candidate.stat().st_size, candidate.stat().st_mtime_ns)
-        )
-    except (OSError, ValueError):
+        data, media_type, mtime_ns = await asyncio.to_thread(load_icon, candidate)
+    except ModuleIconError as exc:
         logger.warning(
-            "模块图标不存在或不可读：key=%s directory=%s path=%s resolved=%s",
-            key, directory, path, candidate,
+            "模块图标读取失败：key=%s path=%s resolved=%s detail=%s",
+            key, path, candidate, exc.detail,
         )
-        raise HTTPException(status_code=404, detail="图标不存在") from None
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    cache_key = (str(candidate), mtime_ns)
+    cached = _cache_get(cache_key)
+    if cached is None:
+        _cache_put(cache_key, data, media_type)
+    else:
+        data, media_type = cached
     logger.info(
         "解析模块图标：key=%s directory=%s path=%s resolved=%s",
         key, directory, path, candidate,
     )
-    if size > 64 * 1024:
-        logger.warning("模块图标超过 64KB：%s/%s", key, path)
-        raise HTTPException(status_code=413, detail="图标文件过大")
-    cache_key = (key, path, mtime_ns)
-    cached = _ICON_CACHE.get(cache_key)
-    if cached is not None and time.monotonic() - cached[2] < _ICON_CACHE_TTL:
-        return Response(
-            content=cached[0],
-            media_type=cached[1],
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
-    if cached is not None:
-        _ICON_CACHE.pop(cache_key, None)
-    try:
-        data = await asyncio.to_thread(candidate.read_bytes)
-    except OSError:
-        logger.warning("模块图标读取失败：%s/%s", key, path)
-        raise HTTPException(status_code=404, detail="图标不存在") from None
-    content_type = "image/png"
-    if data[:4] == b"\x00\x00\x01\x00":
-        try:
-            with Image.open(BytesIO(data)) as image:
-                if image.format != "ICO":
-                    raise UnidentifiedImageError("not ico")
-                if (
-                    image.width <= 0
-                    or image.height <= 0
-                    or image.width * image.height > 1024 * 1024
-                ):
-                    raise ValueError("icon dimensions too large")
-                rgba = image.convert("RGBA")
-                output = BytesIO()
-                rgba.save(output, format="PNG", optimize=True)
-                data = output.getvalue()
-        except (UnidentifiedImageError, OSError, ValueError):
-            logger.warning("模块图标 ICO 解码失败：%s/%s", key, path)
-            raise HTTPException(status_code=415, detail="图标格式不合法") from None
-    elif data.startswith(b"\x89PNG\r\n\x1a\n"):
-        try:
-            with Image.open(BytesIO(data)) as image:
-                if image.format != "PNG":
-                    raise UnidentifiedImageError("not png")
-                if (
-                    image.width <= 0
-                    or image.height <= 0
-                    or image.width * image.height > 1024 * 1024
-                ):
-                    raise ValueError("icon dimensions too large")
-                rgba = image.convert("RGBA")
-                output = BytesIO()
-                rgba.save(output, format="PNG", optimize=True)
-                data = output.getvalue()
-        except (UnidentifiedImageError, OSError, ValueError):
-            logger.warning("模块图标 PNG 解码失败：%s/%s", key, path)
-            raise HTTPException(status_code=415, detail="图标格式不合法") from None
-    else:
-        try:
-            text = data.decode("utf-8", errors="strict")
-        except UnicodeDecodeError:
-            raise HTTPException(status_code=415, detail="图标格式不合法") from None
-        text = text.lstrip("\ufeff \t\r\n")
-        lowered = text.lower()
-        if not (text.startswith("<?xml") or text.startswith("<svg")):
-            raise HTTPException(status_code=415, detail="图标格式不合法")
-        if any(token in lowered for token in ("<!doctype", "<!entity", "<script", "javascript:")):
-            logger.warning("拒绝不安全的 SVG：%s/%s", key, path)
-            raise HTTPException(status_code=415, detail="图标格式不合法")
-        content_type = "image/svg+xml"
-
-    if len(_ICON_CACHE) >= 128:
-        _ICON_CACHE.clear()
-    _ICON_CACHE[cache_key] = (data, content_type, time.monotonic())
     return Response(
         content=data,
-        media_type=content_type,
-        headers={
-            "Cache-Control": "public, max-age=86400",
-            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
-        },
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 

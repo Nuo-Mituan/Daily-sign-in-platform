@@ -43,7 +43,9 @@ def get_module_physical_path(module: Module) -> Path:
     """Resolve a module's physical directory, independent of its API key."""
     directory = module.directory_name or module.key
     if not MODULE_KEY_PATTERN.fullmatch(directory):
-        raise ModuleConfigError("模块物理目录名不合法")
+        raise ModuleConfigError(
+            f"模块 {module.key} 的 directory_name={directory!r} 不合法"
+        )
     root = settings.modules_dir.resolve()
     target = (root / directory).resolve()
     if not target.is_relative_to(root):
@@ -322,6 +324,26 @@ def scan_modules() -> list[ScannedModule]:
     return scanned
 
 
+def _module_field_values(config: ModuleConfig) -> dict[str, Any]:
+    """Fields shared by the create and update sync paths."""
+    return {
+        "directory_name": config.directory_name,
+        "legacy_key": config.legacy_key,
+        "name": config.name,
+        "description": config.description,
+        "author": config.author,
+        "version": config.version,
+        "icon": config.icon or "🧩",
+        "icon_source": config.icon_source,
+        "icon_data": config.icon_data,
+        "default_start_time": config.default_start_time,
+        "default_end_time": config.default_end_time,
+        "default_repeat_cycle": config.default_repeat_cycle,
+        "default_repeat_sub_value": config.default_repeat_sub_value,
+        "multi_account": config.multi_account,
+    }
+
+
 async def sync_modules(db: AsyncSession) -> SyncResult:
     """Reconcile the modules directory with database records.
 
@@ -367,6 +389,19 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
                     row.key,
                 )
 
+        if (
+            row is None
+            and config.directory_name
+            and config.directory_name != item.key
+            and not config.legacy_key
+        ):
+            result.invalid.append(
+                (
+                    item.key,
+                    f"目录名与 key 不一致，请补 legacy_key={item.key} "
+                    f"或执行 python -m app.migrate_modules --map {item.key}={config.directory_name}",
+                )
+            )
         if row is None:
             row = Module(
                 key=item.key,
