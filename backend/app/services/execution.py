@@ -26,6 +26,7 @@ from ..models import (
     Module,
 )
 from ..module_loader import (
+    get_module_physical_path,
     ModuleConfig,
     ModuleConfigError,
     account_display,
@@ -398,6 +399,7 @@ def _write_execution_header(
 async def _run_one_account(
     *,
     module_key: str,
+    module_directory: str | None,
     index: int,
     total: int,
     account: dict[str, object],
@@ -416,7 +418,7 @@ async def _run_one_account(
     runner = None
     cancelled = False
     try:
-        runner = load_runner(module_key)
+        runner = load_runner(module_key, module_directory)
         raw_result = await asyncio.wait_for(
             _invoke_run(runner.run, account["params"]),  # type: ignore[arg-type]  # TODO(v1.0.3): fix typing
             timeout=settings.module_timeout,
@@ -471,6 +473,7 @@ async def _run_one_account(
 
 async def _run_accounts(
     module_key: str,
+    module_directory: str | None,
     accounts: list[dict[str, object]],
     capture: OutputCapture,
 ) -> tuple[list[AccountResult], bool]:
@@ -479,6 +482,7 @@ async def _run_accounts(
     for index, account in enumerate(accounts, start=1):
         result, cancelled = await _run_one_account(
             module_key=module_key,
+            module_directory=module_directory,
             index=index,
             total=total,
             account=account,
@@ -515,11 +519,14 @@ async def _perform(
 ) -> ExecutionOutcome:
     module, context = await _load_execution_module(module_id)
     module_key, module_name = module.key, module.name
+    module_directory = module.directory_name or module.key
     _write_execution_header(module_name, trigger, capture)
     results: list[AccountResult] = []
     total = 0
     try:
-        config = parse_config_file(settings.modules_dir / module_key / "config.json")
+        config = parse_config_file(
+            get_module_physical_path(module) / "config.json"
+        )
         accounts = _load_accounts(config, module, context)
         sensitive = collect_sensitive_values(
             [spec.model_dump(mode="json") for spec in config.params],
@@ -537,7 +544,7 @@ async def _perform(
             else:
                 capture.writeline(f"模式：单账号 · {accounts[0]['display']}")
             capture.writeline("")
-            results, cancelled = await _run_accounts(module_key, accounts, capture)
+            results, cancelled = await _run_accounts(module_key, module_directory, accounts, capture)
             if cancelled:
                 return _cancelled_outcome(results, total)
             status, message, ok_count, failed_count = _aggregate(results)

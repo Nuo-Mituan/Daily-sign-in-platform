@@ -37,6 +37,14 @@ from .scheduling import (
 logger = logging.getLogger(__name__)
 
 MODULE_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
+
+
+def get_module_physical_path(module: Module) -> Path:
+    """Resolve a module's physical directory, independent of its API key."""
+    directory = module.directory_name or module.key
+    if not MODULE_KEY_PATTERN.fullmatch(directory):
+        raise ModuleConfigError("模块物理目录名不合法")
+    return settings.modules_dir / directory
 PARAM_KEY_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
 SUPPORTED_PARAM_TYPES = {"text", "textarea", "password", "select", "switch", "number"}
 MAX_PARAMS = 60
@@ -129,6 +137,8 @@ class ModuleConfig(BaseModel):
     icon_source: Literal["url", "base64", "local"] = "url"
     icon_data: str | None = Field(default=None, max_length=65536)
     directory_name: str | None = Field(default=None, max_length=80)
+    # Explicit opt-in for preserving an old API key after a directory rename.
+    legacy_key: str | None = Field(default=None, max_length=80)
     # Legacy field accepted for old modules; new modules should use the fields below.
     default_cron: str | None = Field(default=None, max_length=100)
     default_start_time: str = Field(default="08:00", max_length=5)
@@ -155,6 +165,12 @@ class ModuleConfig(BaseModel):
                 self.directory_name
             ):
                 raise ValueError("directory_name 只能包含字母、数字、下划线和短横线")
+        if self.legacy_key is not None:
+            self.legacy_key = self.legacy_key.strip() or None
+            if self.legacy_key is not None and not MODULE_KEY_PATTERN.fullmatch(
+                self.legacy_key
+            ):
+                raise ValueError("legacy_key 只能包含字母、数字、下划线和短横线")
         if self.icon.startswith("data:"):
             data_uri = self.icon
         if data_uri is not None:
@@ -329,22 +345,20 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
         desired_directory = config.directory_name or item.path.name
         row = existing.get(item.key)
 
-        # A directory can be renamed independently of its API key. If the
-        # physical directory is new but an unlinked DB row has the same
-        # configured display name, adopt that row and preserve its API key.
-        if row is None and config.directory_name:
-            candidates = [
-                candidate
-                for candidate in existing.values()
-                if candidate.key not in seen
+        # A directory rename may preserve an old API key only when the config
+        # explicitly opts in with legacy_key. Name-only matching is forbidden:
+        # it could bind an unrelated module's encrypted accounts to this one.
+        if row is None and config.directory_name and config.legacy_key:
+            candidate = existing.get(config.legacy_key)
+            if (
+                candidate is not None
+                and candidate.key not in seen
                 and candidate.key not in scanned_keys
                 and candidate.directory_name is None
-                and candidate.name == config.name
-            ]
-            if len(candidates) == 1:
-                row = candidates[0]
+            ):
+                row = candidate
                 logger.info(
-                    "模块目录 %s 复用 API key %s（名称匹配）",
+                    "模块目录 %s 复用显式 legacy_key %s",
                     item.path.name,
                     row.key,
                 )
@@ -676,10 +690,11 @@ class LoadedRunner:
     inserted_sys_path: bool = False
 
 
-def load_runner(key: str) -> LoadedRunner:
+def load_runner(key: str, directory_name: str | None = None) -> LoadedRunner:
     key = validate_module_key(key)
+    directory = validate_module_key(directory_name or key)
     base_dir = settings.modules_dir.resolve()
-    module_dir = (base_dir / key).resolve()
+    module_dir = (base_dir / directory).resolve()
     if module_dir.parent != base_dir:
         raise ModuleConfigError("模块路径非法")
     if not module_dir.is_dir():

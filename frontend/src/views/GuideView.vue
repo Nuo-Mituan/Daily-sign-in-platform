@@ -121,6 +121,8 @@
             不填时回退为 API key。修改目录名后重新扫描模块即可同步数据库，
             图标接口会按该字段读取 <code>modules/&lt;directory_name&gt;/</code>。
             该值只能包含字母、数字、下划线和短横线，禁止路径分隔符或 <code>..</code>。
+            目录改名并需保留原 API key 时，必须同时声明 <code>legacy_key</code>；
+            平台不会仅凭显示名称自动复用旧记录。
           </div>
           <pre class="code-block"><code>{{ configExample }}</code></pre>
           <div class="doc-callout">
@@ -373,6 +375,7 @@ const configFields = [
   { name: 'version', type: 'string', required: false, desc: '模块版本号，默认 1.0.0。' },
   { name: 'icon', type: 'string', required: false, desc: '模块图标：Emoji、./favicon.ico、Base64 Data URI 或 HTTPS URL，默认 🧩。' },
   { name: 'directory_name', type: 'string', required: false, desc: '物理模块目录名，最多 80 字符；为空时回退使用模块 key。用于 API key 与目录名独立演进。' },
+  { name: 'legacy_key', type: 'string', required: false, desc: '目录改名时显式指定要保留的旧 API key；仅当旧 key 对应目录已不存在时生效，避免同名模块串用配置。' },
   { name: 'default_start_time', type: 'string', required: true, desc: '默认开始时间 HH:mm，例如 08:00。' },
   { name: 'default_end_time', type: 'string', required: true, desc: '默认结束时间 HH:mm，例如 10:00。' },
   { name: 'default_repeat_cycle', type: 'string', required: false, desc: 'daily / weekly / monthly_15 / monthly / yearly。' },

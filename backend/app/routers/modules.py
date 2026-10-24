@@ -20,6 +20,7 @@ from ..database import get_db
 from ..deps import AuthContext, get_auth_context, get_current_user
 from ..models import ExecutionLog, Module, ModuleSchedule, User
 from ..module_loader import (
+    get_module_physical_path,
     ModuleConfig,
     ModuleConfigError,
     normalize_accounts,
@@ -254,7 +255,7 @@ async def _get_module_or_404(db: AsyncSession, module_id: int) -> Module:
 
 def _live_config(module: Module) -> ModuleConfig:
     try:
-        return parse_config_file(settings.modules_dir / module.key / "config.json")
+        return parse_config_file(get_module_physical_path(module) / "config.json")
     except ModuleConfigError as exc:
         raise HTTPException(
             status_code=409,
@@ -480,25 +481,64 @@ async def module_icon(
     except OSError:
         logger.warning("模块图标读取失败：%s/%s", key, path)
         raise HTTPException(status_code=404, detail="图标不存在") from None
-    if len(data) < 4 or data[:4] != b"\x00\x00\x01\x00":
-        logger.warning("模块图标不是合法 ICO：%s/%s", key, path)
-        raise HTTPException(status_code=415, detail="图标格式不合法")
-    try:
-        with Image.open(BytesIO(data)) as image:
-            if image.format != "ICO":
-                raise UnidentifiedImageError("not ico")
-            if image.width <= 0 or image.height <= 0 or image.width * image.height > 1024 * 1024:
-                raise ValueError("icon dimensions too large")
-            rgba = image.convert("RGBA")
-            output = BytesIO()
-            rgba.save(output, format="PNG", optimize=True)
-    except (UnidentifiedImageError, OSError, ValueError):
-        logger.warning("模块图标 ICO 解码失败：%s/%s", key, path)
-        raise HTTPException(status_code=415, detail="图标格式不合法") from None
+    content_type = "image/png"
+    if data[:4] == b"\x00\x00\x01\x00":
+        try:
+            with Image.open(BytesIO(data)) as image:
+                if image.format != "ICO":
+                    raise UnidentifiedImageError("not ico")
+                if (
+                    image.width <= 0
+                    or image.height <= 0
+                    or image.width * image.height > 1024 * 1024
+                ):
+                    raise ValueError("icon dimensions too large")
+                rgba = image.convert("RGBA")
+                output = BytesIO()
+                rgba.save(output, format="PNG", optimize=True)
+                data = output.getvalue()
+        except (UnidentifiedImageError, OSError, ValueError):
+            logger.warning("模块图标 ICO 解码失败：%s/%s", key, path)
+            raise HTTPException(status_code=415, detail="图标格式不合法") from None
+    elif data.startswith(b"\x89PNG\r\n\x1a\n"):
+        try:
+            with Image.open(BytesIO(data)) as image:
+                if image.format != "PNG":
+                    raise UnidentifiedImageError("not png")
+                if (
+                    image.width <= 0
+                    or image.height <= 0
+                    or image.width * image.height > 1024 * 1024
+                ):
+                    raise ValueError("icon dimensions too large")
+                rgba = image.convert("RGBA")
+                output = BytesIO()
+                rgba.save(output, format="PNG", optimize=True)
+                data = output.getvalue()
+        except (UnidentifiedImageError, OSError, ValueError):
+            logger.warning("模块图标 PNG 解码失败：%s/%s", key, path)
+            raise HTTPException(status_code=415, detail="图标格式不合法") from None
+    else:
+        try:
+            text = data.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=415, detail="图标格式不合法") from None
+        text = text.lstrip("\ufeff \t\r\n")
+        lowered = text.lower()
+        if not (text.startswith("<?xml") or text.startswith("<svg")):
+            raise HTTPException(status_code=415, detail="图标格式不合法")
+        if any(token in lowered for token in ("<!doctype", "<!entity", "<script", "javascript:")):
+            logger.warning("拒绝不安全的 SVG：%s/%s", key, path)
+            raise HTTPException(status_code=415, detail="图标格式不合法")
+        content_type = "image/svg+xml"
+
     return Response(
-        content=output.getvalue(),
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=86400"},
+        content=data,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+        },
     )
 
 
@@ -749,7 +789,7 @@ async def delete_module(
     name = module.name
     if delete_files:
         try:
-            remove_module_directory(key)
+            remove_module_directory(module.directory_name or key)
         except (ModuleUploadError, ModuleConfigError, OSError) as exc:
             raise HTTPException(status_code=500, detail=f"删除模块文件失败：{exc}") from exc
 
