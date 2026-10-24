@@ -344,155 +344,128 @@ def _module_field_values(config: ModuleConfig) -> dict[str, Any]:
     }
 
 
-async def sync_modules(db: AsyncSession) -> SyncResult:
-    """Reconcile the modules directory with database records.
+async def _find_existing_module(
+    db: AsyncSession,
+    key: str,
+    config: ModuleConfig,
+    scanned_keys: set[str] | None = None,
+) -> Module | None:
+    row = await db.scalar(select(Module).where(Module.key == key))
+    if row is None and config.directory_name and config.legacy_key:
+        if config.legacy_key in (scanned_keys or set()):
+            return None
+        row = await db.scalar(
+            select(Module).where(
+                Module.key == config.legacy_key,
+                Module.directory_name.is_(None),
+            )
+        )
+    return row
 
-    New modules start disabled. Existing modules keep their own cron/enabled state.
-    Missing or broken directories are flagged instead of silently deleting user data.
-    """
+
+def _create_module_from_config(
+    db: AsyncSession, key: str, config: ModuleConfig
+) -> Module:
+    schema = [param.model_dump(mode="json") for param in config.params]
+    row = Module(
+        key=key,
+        **{
+            **_module_field_values(config),
+            "default_cron": config.default_cron or "0 8 * * *",
+            "cron": config.default_cron or "0 8 * * *",
+            "start_time": config.default_start_time,
+            "end_time": config.default_end_time,
+            "repeat_cycle": config.default_repeat_cycle,
+            "repeat_sub_value": config.default_repeat_sub_value,
+            "push_enabled": False,
+            "push_independent": False,
+            "push_unified": False,
+            "enabled": False,
+            "param_schema": schema,
+            "load_error": None,
+        },
+    )
+    db.add(row)
+    return row
+
+
+def _update_module_from_config(
+    module: Module, config: ModuleConfig
+) -> str | None:
+    for field, value in _module_field_values(config).items():
+        if field == "legacy_key" and value is None:
+            continue
+        setattr(module, field, value)
+    module.directory_name = config.directory_name or module.key
+    module.default_cron = config.default_cron or module.default_cron or "0 8 * * *"
+    if not module.start_time:
+        module.start_time = config.default_start_time
+    if not module.end_time:
+        module.end_time = config.default_end_time
+    if not module.repeat_cycle:
+        module.repeat_cycle = config.default_repeat_cycle
+    try:
+        cycle, sub_value = normalize_legacy_cycle(
+            module.repeat_cycle, module.repeat_sub_value
+        )
+    except ScheduleError as exc:
+        module.load_error = f"重复周期无效：{exc}"
+        return module.load_error
+    module.repeat_cycle = cycle
+    if not module.repeat_sub_value:
+        module.repeat_sub_value = sub_value
+    module.param_schema = [
+        param.model_dump(mode="json") for param in config.params
+    ]
+    module.load_error = None
+    return None
+
+
+async def _mark_missing_modules(
+    db: AsyncSession, seen: set[str], result: SyncResult
+) -> None:
+    rows = (await db.execute(select(Module))).scalars().all()
+    for row in rows:
+        if row.key not in seen:
+            row.load_error = "模块目录不存在或已被移除"
+            result.invalid.append((row.key, row.load_error))
+
+
+async def sync_modules(db: AsyncSession) -> SyncResult:
+    """Reconcile modules directory with DB; soft-mark missing directories."""
     scanned = scan_modules()
-    existing_rows = (await db.execute(select(Module))).scalars().all()
-    existing = {row.key: row for row in existing_rows}
+    scanned_keys = {item.key for item in scanned}
     result = SyncResult()
     seen: set[str] = set()
-    scanned_keys = {item.key for item in scanned}
-
     for item in scanned:
         seen.add(item.key)
         if item.config is None:
             result.invalid.append((item.key, item.error or "模块配置无效"))
-            row = existing.get(item.key)
-            if row is not None:
-                row.load_error = item.error or "模块配置无效"
             continue
-
         config = item.config
-        schema = [param.model_dump(mode="json") for param in config.params]
-        desired_directory = config.directory_name or item.path.name
-        row = existing.get(item.key)
-
-        # A directory rename may preserve an old API key only when the config
-        # explicitly opts in with legacy_key. Name-only matching is forbidden:
-        # it could bind an unrelated module's encrypted accounts to this one.
-        if row is None and config.directory_name and config.legacy_key:
-            candidate = existing.get(config.legacy_key)
-            if (
-                candidate is not None
-                and candidate.key not in seen
-                and candidate.key not in scanned_keys
-                and candidate.directory_name is None
-            ):
-                row = candidate
-                logger.info(
-                    "模块目录 %s 复用显式 legacy_key %s",
-                    item.path.name,
-                    row.key,
-                )
-
-        if (
-            row is None
-            and config.directory_name
-            and config.directory_name != item.key
-            and not config.legacy_key
-        ):
-            result.invalid.append(
-                (
-                    item.key,
-                    f"目录名与 key 不一致，请补 legacy_key={item.key} "
-                    f"或执行 python -m app.migrate_modules --map {item.key}={config.directory_name}",
-                )
-            )
+        if config.directory_name and config.directory_name != item.key and not config.legacy_key:
+            result.invalid.append((
+                item.key,
+                f"目录名与 key 不一致，请补 legacy_key={item.key} "
+                f"或执行 python -m app.migrate_modules --map {item.key}={config.directory_name}",
+            ))
+        row = await _find_existing_module(db, item.key, config, scanned_keys)
         if row is None:
-            row = Module(
-                key=item.key,
-                directory_name=desired_directory,
-                legacy_key=config.legacy_key,
-                name=config.name,
-                description=config.description,
-                author=config.author,
-                version=config.version,
-                icon=config.icon or "🧩",
-                icon_source=config.icon_source,
-                icon_data=config.icon_data,
-                default_cron=config.default_cron or "0 8 * * *",
-                cron=config.default_cron or "0 8 * * *",
-                default_start_time=config.default_start_time,
-                default_end_time=config.default_end_time,
-                default_repeat_cycle=config.default_repeat_cycle,
-                default_repeat_sub_value=config.default_repeat_sub_value,
-                start_time=config.default_start_time,
-                end_time=config.default_end_time,
-                repeat_cycle=config.default_repeat_cycle,
-                repeat_sub_value=config.default_repeat_sub_value,
-                multi_account=config.multi_account,
-                push_enabled=False,
-                push_independent=False,
-                push_unified=False,
-                enabled=False,
-                param_schema=schema,
-                load_error=None,
-            )
-            db.add(row)
+            row = _create_module_from_config(db, item.key, config)
             result.added += 1
         else:
-            row.directory_name = desired_directory
-            row.legacy_key = config.legacy_key
-            row.name = config.name
-            row.description = config.description
-            row.author = config.author
-            row.version = config.version
-            row.icon = config.icon or "🧩"
-            row.icon_source = config.icon_source
-            row.icon_data = config.icon_data
-            row.default_cron = config.default_cron or row.default_cron or "0 8 * * *"
-            row.default_start_time = config.default_start_time
-            row.default_end_time = config.default_end_time
-            row.default_repeat_cycle = config.default_repeat_cycle
-            row.default_repeat_sub_value = config.default_repeat_sub_value
-            row.multi_account = bool(config.multi_account)
-            # Existing user settings win. Fill only for databases created before
-            # the random-schedule migration.
-            if not row.start_time:
-                row.start_time = config.default_start_time
-            if not row.end_time:
-                row.end_time = config.default_end_time
-            if not row.repeat_cycle:
-                row.repeat_cycle = config.default_repeat_cycle
-            try:
-                normalized_cycle, normalized_sub = normalize_legacy_cycle(
-                    row.repeat_cycle, row.repeat_sub_value
-                )
-            except ScheduleError as exc:
-                row.load_error = f"重复周期无效：{exc}"
-                result.invalid.append((item.key, row.load_error))
+            error = _update_module_from_config(row, config)
+            if error:
+                result.invalid.append((item.key, error))
                 continue
-            if normalized_cycle != row.repeat_cycle:
-                logger.info(
-                    "模块 %s 的旧周期 %s 已迁移为 %s（子选项 %s）",
-                    item.key,
-                    row.repeat_cycle,
-                    normalized_cycle,
-                    normalized_sub,
-                )
-            row.repeat_cycle = normalized_cycle
-            if not row.repeat_sub_value:
-                row.repeat_sub_value = normalized_sub
-            row.param_schema = schema
-            row.load_error = None
             result.updated += 1
-        result.modules.append(row)
         seen.add(row.key)
-
-    for key, row in existing.items():
-        if key in seen:
-            continue
-        row.load_error = "模块目录不存在或已被移除"
-        result.invalid.append((key, row.load_error))
-
+        result.modules.append(row)
+    await _mark_missing_modules(db, seen, result)
     await db.commit()
     for row in result.modules:
         await db.refresh(row)
-    result.total = len(existing_rows) + result.added
+    result.total = len(seen)
     return result
 
 

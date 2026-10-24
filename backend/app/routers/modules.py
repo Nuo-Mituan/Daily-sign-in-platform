@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import re
@@ -487,10 +488,12 @@ async def preview_schedule(payload: SchedulePreviewRequest) -> SchedulePreviewRe
 
 _ICON_RATE: dict[str, list[float]] = {}
 _ICON_RATE_WINDOW = 60.0
-_ICON_RATE_CLEANUP = 300.0
+_ICON_RATE_CLEANUP = 120.0
 _ICON_RATE_LIMIT = 120
 _ICON_RATE_LAST_CLEANUP = 0.0
-_ICON_DECODE_LOCK: asyncio.Lock | None = None
+_ICON_DECODE_LOCK = asyncio.Lock()
+# Dedicated pool for icon decode only; tune max_workers per deployment.
+_ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _ICON_CACHE: "OrderedDict[tuple[str, int], tuple[bytes, str, float]]" = OrderedDict()
 _ICON_CACHE_TTL = 60.0
 _ICON_CACHE_MAX = 128
@@ -531,11 +534,12 @@ async def module_icon(
     global _ICON_RATE_LAST_CLEANUP
     if now - _ICON_RATE_LAST_CLEANUP >= 60:
         cutoff = now - _ICON_RATE_CLEANUP
-        for stale_ip in [
-            ip for ip, stamps in _ICON_RATE.items()
+        stale_ips = [
+            ip for ip, stamps in list(_ICON_RATE.items())
             if not stamps or stamps[-1] < cutoff
-        ]:
-            _ICON_RATE.pop(stale_ip, None)
+        ]
+        for ip in stale_ips:
+            _ICON_RATE.pop(ip, None)
         _ICON_RATE_LAST_CLEANUP = now
     bucket = [stamp for stamp in _ICON_RATE.get(client_ip, []) if now - stamp < _ICON_RATE_WINDOW]
     if len(bucket) >= _ICON_RATE_LIMIT:
@@ -595,9 +599,6 @@ async def module_icon(
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
-    global _ICON_DECODE_LOCK
-    if _ICON_DECODE_LOCK is None:
-        _ICON_DECODE_LOCK = asyncio.Lock()
     try:
         async with _ICON_DECODE_LOCK:
             cached = _cache_get(cache_key)
