@@ -94,6 +94,8 @@ router = APIRouter(
 
 # Public icon router: browsers load <img> without JS/CSRF and icons are
 # non-sensitive, cacheable static resources. Path/traversal checks still apply.
+# 此路由故意豁免认证，因为它是 <img> 标签直接加载的静态资源。
+# Do NOT merge this route back into the authenticated router.
 public_router = APIRouter(prefix="/modules", tags=["签到模块"])
 
 
