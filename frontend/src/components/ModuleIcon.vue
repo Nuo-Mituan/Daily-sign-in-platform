@@ -1,15 +1,64 @@
 <template>
-  <span class="module-icon" :class="toneClass" :style="iconStyle">{{ icon || '🧩' }}</span>
+  <span class="module-icon" :class="[toneClass, { 'has-image': imageSrc }]" :style="iconStyle">
+    <img
+      v-if="imageSrc"
+      :src="imageSrc"
+      alt=""
+      class="module-icon__image"
+      @error="onImageError"
+    />
+    <template v-else>{{ failed ? '⚠️' : icon || '⚠️' }}</template>
+  </span>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { modulesApi } from '@/api'
+import { classifyModuleIcon } from '@/utils/moduleIcon'
 
 const props = defineProps({
   icon: { type: String, default: '🧩' },
+  source: { type: String, default: 'url' },
+  iconData: { type: String, default: '' },
+  moduleKey: { type: String, default: '' },
   size: { type: [Number, String], default: 46 },
   tone: { type: [String, Number], default: 0 },
 })
+
+const imageSrc = ref('')
+const failed = ref(false)
+
+watch(
+  () => [props.source, props.iconData, props.moduleKey, props.icon],
+  () => {
+    const kind = classifyModuleIcon({
+      icon: props.icon,
+      source: props.source,
+      iconData: props.iconData,
+      moduleKey: props.moduleKey,
+    })
+    failed.value = kind.type === 'fallback'
+    if (kind.type === 'emoji' || kind.type === 'fallback') {
+      imageSrc.value = ''
+      return
+    }
+    if (kind.type === 'base64' || kind.type === 'remote-url') {
+      imageSrc.value = kind.src || ''
+      failed.value = !imageSrc.value
+      return
+    }
+    imageSrc.value = kind.path.startsWith('/static/')
+      ? kind.path
+      : modulesApi.iconUrl(props.moduleKey, kind.path)
+  },
+  { immediate: true },
+)
+
+
+function onImageError() {
+  imageSrc.value = ''
+  failed.value = true
+}
 
 const TONES = ['violet', 'mint', 'sky', 'amber']
 
@@ -41,6 +90,19 @@ const iconStyle = computed(() => {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   line-height: 1;
   user-select: none;
+}
+
+.module-icon.has-image {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.module-icon__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 .tone-violet {
