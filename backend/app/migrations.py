@@ -34,6 +34,7 @@ _LEGACY_COLUMNS: dict[str, str] = {
     "icon_source": "VARCHAR(16) DEFAULT 'url'",
     "icon_data": "TEXT",
     "directory_name": "VARCHAR(80)",
+    "legacy_key": "VARCHAR(80)",
 }
 
 

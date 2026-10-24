@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import shutil
+import time
 import uuid
 from io import BytesIO
 from datetime import datetime
@@ -12,7 +14,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from PIL import Image, UnidentifiedImageError
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +31,7 @@ from ..module_loader import (
     parse_config_file,
     sync_modules,
     validate_and_normalize_params,
+    validate_module_key,
 )
 from ..scheduling import (
     ScheduleError,
@@ -124,6 +127,10 @@ def _module_out(
         id=module.id,
         key=module.key,
         directory_name=module.directory_name,
+        legacy_key=module.legacy_key,
+        migration_status=(
+            "ok" if module.directory_name else "needs_legacy_key"
+        ),
         name=module.name,
         description=module.description,
         author=module.author,
@@ -367,8 +374,18 @@ async def upload_module(
     context: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ) -> UploadResponse:
+    directory_name: str | None = None
+    if name:
+        try:
+            requested_key = validate_module_key(name.strip())
+        except ModuleConfigError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        existing = await db.scalar(select(Module).where(Module.key == requested_key))
+        directory_name = existing.directory_name if existing else None
     try:
-        key, _config = await install_module_upload(file, name, overwrite)
+        key, _config = await install_module_upload(
+            file, name, overwrite, directory_name
+        )
     except (ModuleUploadError, ModuleConfigError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
@@ -438,13 +455,26 @@ async def preview_schedule(payload: SchedulePreviewRequest) -> SchedulePreviewRe
     )
 
 
+_ICON_RATE: dict[str, list[float]] = {}
+_ICON_CACHE: dict[tuple[str, str, int], tuple[bytes, str, float]] = {}
+_ICON_CACHE_TTL = 60.0
+
+
 @public_router.get("/icon", summary="读取签到模块本地图标")
 async def module_icon(
+    request: Request,
     key: str = Query(min_length=1, max_length=80),
     path: str = Query(default="icon.ico", min_length=1, max_length=255),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Serve a module-local icon; directory_name comes from Module metadata."""
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    bucket = [stamp for stamp in _ICON_RATE.get(client_ip, []) if now - stamp < 60]
+    if len(bucket) >= 120:
+        raise HTTPException(status_code=429, detail="图标请求过于频繁")
+    bucket.append(now)
+    _ICON_RATE[client_ip] = bucket
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", key):
         raise HTTPException(status_code=400, detail="模块标识不合法")
     module = await db.scalar(select(Module).where(Module.key == key))
@@ -469,7 +499,9 @@ async def module_icon(
         logger.warning("拒绝模块图标路径越界：%s/%s", key, path)
         raise HTTPException(status_code=403, detail="图标路径不合法")
     try:
-        size = candidate.stat().st_size
+        size, mtime_ns = await asyncio.to_thread(
+            lambda: (candidate.stat().st_size, candidate.stat().st_mtime_ns)
+        )
     except (OSError, ValueError):
         logger.warning(
             "模块图标不存在或不可读：key=%s directory=%s path=%s resolved=%s",
@@ -483,8 +515,18 @@ async def module_icon(
     if size > 64 * 1024:
         logger.warning("模块图标超过 64KB：%s/%s", key, path)
         raise HTTPException(status_code=413, detail="图标文件过大")
+    cache_key = (key, path, mtime_ns)
+    cached = _ICON_CACHE.get(cache_key)
+    if cached is not None and time.monotonic() - cached[2] < _ICON_CACHE_TTL:
+        return Response(
+            content=cached[0],
+            media_type=cached[1],
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    if cached is not None:
+        _ICON_CACHE.pop(cache_key, None)
     try:
-        data = candidate.read_bytes()
+        data = await asyncio.to_thread(candidate.read_bytes)
     except OSError:
         logger.warning("模块图标读取失败：%s/%s", key, path)
         raise HTTPException(status_code=404, detail="图标不存在") from None
@@ -539,6 +581,9 @@ async def module_icon(
             raise HTTPException(status_code=415, detail="图标格式不合法")
         content_type = "image/svg+xml"
 
+    if len(_ICON_CACHE) >= 128:
+        _ICON_CACHE.clear()
+    _ICON_CACHE[cache_key] = (data, content_type, time.monotonic())
     return Response(
         content=data,
         media_type=content_type,

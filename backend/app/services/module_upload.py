@@ -116,6 +116,7 @@ def _install_zip_sync(
     zip_filename: str,
     requested_name: str | None,
     overwrite: bool,
+    directory_name: str | None = None,
 ) -> tuple[str, ModuleConfig]:
     modules_dir = settings.modules_dir.resolve()
     modules_dir.mkdir(parents=True, exist_ok=True)
@@ -142,7 +143,18 @@ def _install_zip_sync(
                 stem = Path(zip_filename).stem
                 key = _sanitize_key(stem)
 
-            target = modules_dir / key
+            physical_directory = validate_module_key(directory_name or key)
+            target = modules_dir / physical_directory
+            key_directory = modules_dir / key
+            if (
+                physical_directory != key
+                and key_directory.exists()
+                and target.exists()
+            ):
+                raise ModuleUploadError(
+                    f"模块标识「{key}」与物理目录「{physical_directory}」同时存在，"
+                    "请先清理冲突目录"
+                )
             if target.exists() and not overwrite:
                 raise ModuleUploadError(
                     f"模块标识「{key}」已存在。如需覆盖，请勾选“覆盖同名模块”。"
@@ -177,6 +189,8 @@ def _install_zip_sync(
                 except (RuntimeError, zipfile.BadZipFile, OSError) as exc:
                     raise ModuleUploadError(f"解压文件失败：{info.filename}（{exc}）") from exc
 
+        if temp_root is None or target is None:
+            raise ModuleUploadError("模块解压目录未就绪")
         if not (temp_root / "config.json").is_file():
             raise ModuleUploadError("解压后未找到 config.json")
         if not (temp_root / "main.py").is_file():
@@ -184,7 +198,7 @@ def _install_zip_sync(
         config = parse_config_file(temp_root / "config.json")
 
         if target.exists():
-            backup_path = modules_dir / f".backup-{key}-{secrets.token_hex(4)}"
+            backup_path = modules_dir / f".backup-{physical_directory}-{secrets.token_hex(4)}"
             os.replace(target, backup_path)
         try:
             os.replace(temp_root, target)
@@ -210,6 +224,7 @@ async def install_module_upload(
     upload: UploadFile,
     requested_name: str | None,
     overwrite: bool,
+    directory_name: str | None = None,
 ) -> tuple[str, ModuleConfig]:
     filename = upload.filename or "module.zip"
     if not filename.lower().endswith(".zip"):
@@ -236,7 +251,12 @@ async def install_module_upload(
         if total == 0:
             raise ModuleUploadError("上传的文件为空")
         return await asyncio.to_thread(
-            _install_zip_sync, temp_path, filename, requested_name, overwrite
+            _install_zip_sync,
+            temp_path,
+            filename,
+            requested_name,
+            overwrite,
+            directory_name,
         )
     finally:
         _close_quietly(temp_file)

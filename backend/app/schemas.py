@@ -71,6 +71,8 @@ class ModuleOut(BaseModel):
     id: int
     key: str
     directory_name: str | None = None
+    legacy_key: str | None = None
+    migration_status: str = "ok"
     name: str
     description: str
     author: str

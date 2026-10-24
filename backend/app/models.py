@@ -106,6 +106,9 @@ class Module(Base):
     directory_name: Mapped[str | None] = mapped_column(
         String(80), nullable=True, default=None
     )
+    legacy_key: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, default=None
+    )
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="")
     author: Mapped[str] = mapped_column(String(120), default="")

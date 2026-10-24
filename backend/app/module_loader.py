@@ -371,6 +371,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             row = Module(
                 key=item.key,
                 directory_name=desired_directory,
+                legacy_key=config.legacy_key,
                 name=config.name,
                 description=config.description,
                 author=config.author,
@@ -400,6 +401,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             result.added += 1
         else:
             row.directory_name = desired_directory
+            row.legacy_key = config.legacy_key
             row.name = config.name
             row.description = config.description
             row.author = config.author
