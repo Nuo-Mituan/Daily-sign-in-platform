@@ -7,7 +7,7 @@
       class="module-icon__image"
       @error="onImageError"
     />
-    <template v-else>{{ failed ? '⚠️' : icon || '⚠️' }}</template>
+    <template v-else>{{ failed || isPathLike ? '⚠️' : icon || '⚠️' }}</template>
   </span>
 </template>
 
@@ -27,6 +27,11 @@ const props = defineProps({
 
 const imageSrc = ref('')
 const failed = ref(false)
+const isPathLike = computed(
+  () =>
+    /[\\/]/.test(props.icon || '') ||
+    /\.(ico|png|svg|jpe?g|webp|gif)$/i.test(props.icon || ''),
+)
 
 watch(
   () => [props.source, props.iconData, props.moduleKey, props.icon],
