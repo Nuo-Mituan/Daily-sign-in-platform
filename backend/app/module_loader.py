@@ -44,7 +44,11 @@ def get_module_physical_path(module: Module) -> Path:
     directory = module.directory_name or module.key
     if not MODULE_KEY_PATTERN.fullmatch(directory):
         raise ModuleConfigError("模块物理目录名不合法")
-    return settings.modules_dir / directory
+    root = settings.modules_dir.resolve()
+    target = (root / directory).resolve()
+    if not target.is_relative_to(root):
+        raise ModuleConfigError("模块物理目录越界")
+    return target
 PARAM_KEY_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
 SUPPORTED_PARAM_TYPES = {"text", "textarea", "password", "select", "switch", "number"}
 MAX_PARAMS = 60
