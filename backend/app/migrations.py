@@ -33,6 +33,7 @@ _LEGACY_COLUMNS: dict[str, str] = {
     "push_unified": "BOOLEAN",
     "icon_source": "VARCHAR(16) DEFAULT 'url'",
     "icon_data": "TEXT",
+    "directory_name": "VARCHAR(80)",
 }
 
 

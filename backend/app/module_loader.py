@@ -128,6 +128,7 @@ class ModuleConfig(BaseModel):
     icon: str = Field(default="🧩", max_length=65536)
     icon_source: Literal["url", "base64", "local"] = "url"
     icon_data: str | None = Field(default=None, max_length=65536)
+    directory_name: str | None = Field(default=None, max_length=80)
     # Legacy field accepted for old modules; new modules should use the fields below.
     default_cron: str | None = Field(default=None, max_length=100)
     default_start_time: str = Field(default="08:00", max_length=5)
@@ -148,6 +149,12 @@ class ModuleConfig(BaseModel):
             seen.add(param.key)
 
         data_uri = self.icon_data
+        if self.directory_name is not None:
+            self.directory_name = self.directory_name.strip() or None
+            if self.directory_name is not None and not MODULE_KEY_PATTERN.fullmatch(
+                self.directory_name
+            ):
+                raise ValueError("directory_name 只能包含字母、数字、下划线和短横线")
         if self.icon.startswith("data:"):
             data_uri = self.icon
         if data_uri is not None:
@@ -322,6 +329,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
         if row is None:
             row = Module(
                 key=item.key,
+                directory_name=config.directory_name or item.path.name,
                 name=config.name,
                 description=config.description,
                 author=config.author,
@@ -350,6 +358,7 @@ async def sync_modules(db: AsyncSession) -> SyncResult:
             db.add(row)
             result.added += 1
         else:
+            row.directory_name = config.directory_name or item.path.name
             row.name = config.name
             row.description = config.description
             row.author = config.author

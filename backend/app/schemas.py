@@ -70,6 +70,7 @@ class AccountInput(BaseModel):
 class ModuleOut(BaseModel):
     id: int
     key: str
+    directory_name: str | None = None
     name: str
     description: str
     author: str

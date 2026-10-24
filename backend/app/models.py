@@ -102,6 +102,10 @@ class Module(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     key: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    # Physical module directory name. NULL/empty means fall back to key.
+    directory_name: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, default=None
+    )
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="")
     author: Mapped[str] = mapped_column(String(120), default="")
