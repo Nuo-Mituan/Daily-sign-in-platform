@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+# Minimum supported runtime: Python 3.11 (see pyproject requires-python).
 import shutil
 import time
 import uuid
@@ -494,9 +495,27 @@ _ICON_RATE_LIMIT = 120
 _ICON_RATE_LAST_CLEANUP = 0.0
 _ICON_DECODE_LOCK = asyncio.Lock()
 # Dedicated pool for icon decode only; tune max_workers per deployment.
-_ICON_DECODE_POOL_SIZE = int(os.getenv("ICON_DECODE_POOL_SIZE", "4"))
-_ICON_DECODE_POOL_MAX = int(os.getenv("ICON_DECODE_POOL_MAX", "16"))
-_ICON_DECODE_TIMEOUT = float(os.getenv("ICON_DECODE_TIMEOUT", "10.0"))
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        return int(raw)
+    except ValueError as exc:
+        logger.error("环境变量 %s 必须为整数，当前值: %r", name, raw)
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, str(default))
+    try:
+        return float(raw)
+    except ValueError as exc:
+        logger.error("环境变量 %s 必须为数值，当前值: %r", name, raw)
+        raise ValueError(f"{name} must be a number, got {raw!r}") from exc
+
+
+_ICON_DECODE_POOL_SIZE = _env_int("ICON_DECODE_POOL_SIZE", 4)
+_ICON_DECODE_POOL_MAX = _env_int("ICON_DECODE_POOL_MAX", 16)
+_ICON_DECODE_TIMEOUT = _env_float("ICON_DECODE_TIMEOUT", 10.0)
 _ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
     max_workers=max(1, min(_ICON_DECODE_POOL_SIZE, _ICON_DECODE_POOL_MAX))
 )

@@ -324,10 +324,13 @@ def scan_modules() -> list[ScannedModule]:
     return scanned
 
 
-def _module_field_values(
-    config: ModuleConfig, *, is_new: bool = False
-) -> dict[str, Any]:
-    """Fields shared by create/update; is_new applies creation defaults."""
+def _module_field_values(config: ModuleConfig) -> dict[str, Any]:
+    """Return config-derived fields shared by create and update paths.
+
+    directory_name is populated here but callers explicitly override it:
+    create uses config.directory_name or the physical key; update preserves
+    an existing manual mapping when config does not declare one.
+    """
     return {
         "directory_name": config.directory_name,
         "legacy_key": config.legacy_key,
@@ -353,9 +356,16 @@ async def _find_existing_module(
 ) -> Module | None:
     """Find a row by scanned key, then by explicit legacy_key.
 
-    ``config`` comes from the scanned physical directory's config.json. The
-    legacy lookup intentionally only accepts a row whose directory_name is
-    still NULL, so a mapped directory is never silently rebound.
+    ``config`` comes from the scanned physical directory's config.json.
+    The legacy lookup only accepts a row whose directory_name is still NULL,
+    so a mapped directory is never silently rebound.
+
+    Concurrency notes:
+        This function assumes the caller holds a database transaction with
+        at least READ COMMITTED isolation. Concurrent module uploads that
+        modify directory_name during a sync_modules scan may cause transient
+        conflicts; the calling code's directory_name unique index will catch
+        duplicates at the DB level.
     """
     row = await db.scalar(select(Module).where(Module.key == key))
     if row is None and config.directory_name and config.legacy_key:
@@ -373,6 +383,11 @@ async def _find_existing_module(
 
 
 def _apply_field_values(module: Module, values: dict[str, Any]) -> None:
+    """Apply config fields; None legacy_key/directory_name are skipped.
+
+    Other None values intentionally clear the DB field (config is source of
+    truth). This preserves manually mapped directory/legacy credentials.
+    """
     for field, value in values.items():
         if value is None and field in {"legacy_key", "directory_name"}:
             continue
@@ -383,7 +398,9 @@ def _create_module_from_config(
     db: AsyncSession, key: str, config: ModuleConfig
 ) -> Module:
     schema = [param.model_dump(mode="json") for param in config.params]
-    field_values = _module_field_values(config, is_new=True)
+    field_values = _module_field_values(config)
+    # Creation always has a physical directory: explicit config or the key.
+    field_values.pop("directory_name", None)
     field_values["directory_name"] = config.directory_name or key
     row = Module(
         key=key,
@@ -410,7 +427,7 @@ def _create_module_from_config(
 def _update_module_from_config(
     module: Module, config: ModuleConfig
 ) -> str | None:
-    _apply_field_values(module, _module_field_values(config, is_new=False))
+    _apply_field_values(module, _module_field_values(config))
     # Preserve a manually mapped directory unless config explicitly overrides.
     if config.directory_name is not None:
         module.directory_name = config.directory_name
@@ -454,7 +471,11 @@ async def _mark_missing_modules(
 
 
 async def sync_modules(db: AsyncSession) -> SyncResult:
-    """Reconcile modules directory with DB; soft-mark missing directories."""
+    """Reconcile modules directory with DB; soft-mark missing directories.
+
+    Directory scanning is a point-in-time operation. Do not manually edit
+    module configuration during a scan; run another scan after changes.
+    """
     scanned = scan_modules()
     scanned_keys = {item.key for item in scanned}
     result = SyncResult()
