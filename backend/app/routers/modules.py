@@ -429,6 +429,15 @@ async def preview_schedule(payload: SchedulePreviewRequest) -> SchedulePreviewRe
     )
 
 
+# API key -> on-disk module directory. Deployments that rename module
+# directories can override this mapping; unknown keys retain the historical
+# direct-key behavior. Prefer loading this from deployment configuration for
+# large/heterogeneous installations rather than editing source code.
+KEY_TO_DIR: dict[str, str] = {
+    "demo_checkin": "ehentai_daily_login",
+}
+
+
 @router.get("/icon", summary="读取签到模块本地图标")
 async def module_icon(
     key: str = Query(min_length=1, max_length=80),
@@ -437,6 +446,10 @@ async def module_icon(
     """Serve an image from one module directory with traversal/symlink checks."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", key):
         raise HTTPException(status_code=400, detail="模块标识不合法")
+    directory = KEY_TO_DIR.get(key, key)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", directory):
+        logger.warning("模块图标目录映射非法：key=%s directory=%s", key, directory)
+        raise HTTPException(status_code=403, detail="图标路径不合法")
     if "\x00" in path or "\\" in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="图标路径不合法")
     from pathlib import PurePosixPath
@@ -444,9 +457,10 @@ async def module_icon(
     rel = PurePosixPath(path)
     if rel.is_absolute() or any(part in {"..", ""} for part in rel.parts):
         raise HTTPException(status_code=400, detail="图标路径不合法")
-    module_root = (settings.modules_dir / key).resolve()
+    module_root = (settings.modules_dir / directory).resolve()
     root = settings.modules_dir.resolve()
     if not module_root.is_relative_to(root):
+        logger.warning("模块图标目录越界：key=%s directory=%s", key, directory)
         raise HTTPException(status_code=403, detail="图标路径不合法")
     candidate = (module_root / rel).resolve()
     if not candidate.is_relative_to(module_root):
@@ -455,8 +469,15 @@ async def module_icon(
     try:
         size = candidate.stat().st_size
     except (OSError, ValueError):
-        logger.warning("模块图标不存在或不可读：%s/%s", key, path)
+        logger.warning(
+            "模块图标不存在或不可读：key=%s directory=%s path=%s resolved=%s",
+            key, directory, path, candidate,
+        )
         raise HTTPException(status_code=404, detail="图标不存在") from None
+    logger.info(
+        "解析模块图标：key=%s directory=%s path=%s resolved=%s",
+        key, directory, path, candidate,
+    )
     if size > 64 * 1024:
         logger.warning("模块图标超过 64KB：%s/%s", key, path)
         raise HTTPException(status_code=413, detail="图标文件过大")
