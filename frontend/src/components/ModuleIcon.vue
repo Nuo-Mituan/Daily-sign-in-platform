@@ -12,7 +12,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { modulesApi } from '@/api'
 import { classifyModuleIcon } from '@/utils/moduleIcon'
 
@@ -27,6 +27,40 @@ const props = defineProps({
 
 const imageSrc = ref('')
 const failed = ref(false)
+let objectUrl = ''
+let requestRevision = 0
+
+function revokeObjectUrl() {
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl)
+    objectUrl = ''
+  }
+}
+
+async function loadLocalIcon(kind) {
+  const revision = ++requestRevision
+  revokeObjectUrl()
+  imageSrc.value = ''
+  failed.value = false
+  try {
+    const response = await fetch(
+      modulesApi.iconUrl(props.moduleKey, kind.path),
+      { credentials: 'include', cache: 'force-cache' },
+    )
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const type = response.headers.get('content-type') || ''
+    if (!type.startsWith('image/')) throw new Error('not an image')
+    const blob = await response.blob()
+    if (revision !== requestRevision) return
+    objectUrl = URL.createObjectURL(blob)
+    imageSrc.value = objectUrl
+  } catch {
+    if (revision === requestRevision) {
+      imageSrc.value = ''
+      failed.value = true
+    }
+  }
+}
 const isPathLike = computed(
   () =>
     /[\\/]/.test(props.icon || '') ||
@@ -36,6 +70,8 @@ const isPathLike = computed(
 watch(
   () => [props.source, props.iconData, props.moduleKey, props.icon],
   () => {
+    requestRevision += 1
+    revokeObjectUrl()
     const kind = classifyModuleIcon({
       icon: props.icon,
       source: props.source,
@@ -52,15 +88,22 @@ watch(
       failed.value = !imageSrc.value
       return
     }
-    imageSrc.value = kind.path.startsWith('/static/')
-      ? kind.path
-      : modulesApi.iconUrl(props.moduleKey, kind.path)
+    if (kind.path.startsWith('/static/')) {
+      imageSrc.value = kind.path
+      return
+    }
+    void loadLocalIcon(kind)
   },
   { immediate: true },
 )
 
+onBeforeUnmount(() => {
+  requestRevision += 1
+  revokeObjectUrl()
+})
 
 function onImageError() {
+  revokeObjectUrl()
   imageSrc.value = ''
   failed.value = true
 }
