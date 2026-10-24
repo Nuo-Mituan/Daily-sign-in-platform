@@ -43,7 +43,7 @@
               <span class="next-cron mono">{{ nextModule.start_time }}–{{ nextModule.end_time }}</span>
             </div>
             <div class="next-main">
-              <ModuleIcon :icon="nextModule.icon" :size="46" :tone="nextModule.id" />
+              <ModuleIcon :icon="nextModule.icon" :source="nextModule.icon_source" :icon-data="nextModule.icon_data" :module-key="nextModule.key || nextModule.directory_name" :size="46" :tone="nextModule.id" />
               <div class="next-info">
                 <strong>{{ nextModule.name }}</strong>
                 <span>{{ describeSchedule(nextModule.start_time, nextModule.end_time, nextModule.repeat_cycle, nextModule.repeat_sub_value) }}</span>
@@ -218,7 +218,7 @@
                 class="upcoming-item"
                 @click="router.push(`/modules/${item.id}`)"
               >
-                <ModuleIcon :icon="item.icon" :size="36" :tone="index + item.id" />
+                <ModuleIcon :icon="item.icon" :source="item.icon_source" :icon-data="item.icon_data" :module-key="item.key || item.directory_name" :size="36" :tone="index + item.id" />
                 <div class="upcoming-copy">
                   <strong>{{ item.name }}</strong>
                   <span>{{ describeSchedule(item.start_time, item.end_time, item.repeat_cycle, item.repeat_sub_value) }}</span>

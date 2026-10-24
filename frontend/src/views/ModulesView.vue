@@ -109,7 +109,7 @@
         @click="goDetail(module)"
       >
         <div class="card-top">
-          <ModuleIcon :icon="module.icon" :source="module.icon_source" :icon-data="module.icon_data" :module-key="module.key" :size="48" :tone="index + module.id" />
+          <ModuleIcon :icon="module.icon" :source="module.icon_source" :icon-data="module.icon_data" :module-key="module.key || module.directory_name" :size="48" :tone="index + module.id" />
           <div class="card-heading">
             <div class="card-title-line">
               <h2 :title="module.name">{{ module.name }}</h2>

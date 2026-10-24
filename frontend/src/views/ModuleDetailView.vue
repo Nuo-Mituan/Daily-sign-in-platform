@@ -32,7 +32,7 @@
       <section class="module-hero">
         <div class="hero-accent"></div>
         <div class="hero-left">
-          <ModuleIcon :icon="module.icon" :source="module.icon_source" :icon-data="module.icon_data" :module-key="module.key" :size="68" :tone="module.id" />
+          <ModuleIcon :icon="module.icon" :source="module.icon_source" :icon-data="module.icon_data" :module-key="module.key || module.directory_name" :size="68" :tone="module.id" />
           <div class="hero-copy">
             <div class="hero-title-line">
               <h1>{{ module.name }}</h1>

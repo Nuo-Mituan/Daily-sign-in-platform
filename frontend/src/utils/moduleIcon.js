@@ -49,3 +49,7 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
   }
   return { type: 'emoji', src: '' }
 }
+
+export function isImageContentType(value = '') {
+  return /^image\//i.test(String(value))
+}

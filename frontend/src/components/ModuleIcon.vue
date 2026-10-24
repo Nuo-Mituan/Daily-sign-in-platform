@@ -1,5 +1,11 @@
 <template>
-  <span class="module-icon" :class="[toneClass, { 'has-image': imageSrc }]" :style="iconStyle">
+  <span
+    class="module-icon"
+    :class="[toneClass, { 'has-image': imageSrc }]"
+    :style="iconStyle"
+    :title="failureReason || undefined"
+    :aria-label="failureReason || undefined"
+  >
     <img
       v-if="imageSrc"
       :src="imageSrc"
@@ -14,7 +20,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { modulesApi } from '@/api'
-import { classifyModuleIcon } from '@/utils/moduleIcon'
+import { classifyModuleIcon, isImageContentType } from '@/utils/moduleIcon'
 
 const props = defineProps({
   icon: { type: String, default: '🧩' },
@@ -27,6 +33,7 @@ const props = defineProps({
 
 const imageSrc = ref('')
 const failed = ref(false)
+const failureReason = ref('')
 let objectUrl = ''
 let requestRevision = 0
 
@@ -45,19 +52,29 @@ async function loadLocalIcon(kind) {
   try {
     const response = await fetch(
       modulesApi.iconUrl(props.moduleKey, kind.path),
-      { credentials: 'include', cache: 'force-cache' },
+      { credentials: 'include', cache: 'no-store' },
     )
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
     const type = response.headers.get('content-type') || ''
-    if (!type.startsWith('image/')) throw new Error('not an image')
+    if (!isImageContentType(type)) throw new Error('not an image')
     const blob = await response.blob()
     if (revision !== requestRevision) return
     objectUrl = URL.createObjectURL(blob)
     imageSrc.value = objectUrl
-  } catch {
+  } catch (error) {
     if (revision === requestRevision) {
       imageSrc.value = ''
       failed.value = true
+      failureReason.value = 'network'
+      console.warn('[ModuleIcon] icon load failed', {
+        moduleKey: props.moduleKey,
+        icon: props.icon,
+        type: kind.type,
+        path: kind.path,
+        error,
+      })
     }
   }
 }
@@ -79,8 +96,17 @@ watch(
       moduleKey: props.moduleKey,
     })
     failed.value = kind.type === 'fallback'
+    failureReason.value = kind.type === 'fallback' ? 'no-source' : ''
     if (kind.type === 'emoji' || kind.type === 'fallback') {
       imageSrc.value = ''
+      if (kind.type === 'fallback') {
+        console.warn('[ModuleIcon] no usable icon source', {
+          moduleKey: props.moduleKey,
+          icon: props.icon,
+          source: props.source,
+          iconDataLength: (props.iconData || '').length,
+        })
+      }
       return
     }
     if (kind.type === 'base64' || kind.type === 'remote-url') {
@@ -106,6 +132,7 @@ function onImageError() {
   revokeObjectUrl()
   imageSrc.value = ''
   failed.value = true
+  failureReason.value = 'decode'
 }
 
 const TONES = ['violet', 'mint', 'sky', 'amber']
