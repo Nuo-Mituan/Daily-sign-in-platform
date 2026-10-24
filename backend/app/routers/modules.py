@@ -578,11 +578,10 @@ def _tracked_load_icon(candidate: Path) -> tuple[bytes, str, int]:
 
 def shutdown_icon_decode_pool() -> None:
     """Stop accepting work and wait for tracked decode events."""
+    if _ICON_DECODE_POOL is None:
+        return
     try:
         pool = _ICON_DECODE_POOL
-        if pool is None:
-            logger.warning("图标解码线程池尚未创建，无需关闭")
-            return
         pool.shutdown(wait=False, cancel_futures=True)
         events = list(_ACTIVE_ICON_EVENTS)
         if not events:

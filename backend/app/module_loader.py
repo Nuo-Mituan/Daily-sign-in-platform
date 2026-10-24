@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import os
 import json
 import logging
 import math
@@ -57,6 +58,9 @@ PARAM_KEY_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
 SUPPORTED_PARAM_TYPES = {"text", "textarea", "password", "select", "switch", "number"}
 MAX_PARAMS = 60
 MAX_ACCOUNTS = 50
+
+
+_CONCURRENT_RETRY_DELAY = float(os.getenv("CONCURRENT_RETRY_DELAY", "0.05"))
 
 
 class ModuleError(Exception):
@@ -440,18 +444,23 @@ async def _create_or_get_module(
 ) -> Module:
     """Create or get a module idempotently.
 
-    On a unique-key conflict (concurrent upload/scan), wait briefly and retry
-    the exact key lookup. If the row still does not exist, raise ModuleError so
-    the caller can report the upload failure instead of silently skipping it.
+    On a unique-key conflict (concurrent upload/scan), roll back the failed
+    unit of work, wait briefly, and retry the exact key lookup. If the row still
+    does not exist, raise ModuleError so the caller reports the failure instead
+    of silently skipping it.
+
+    Concurrency note:
+        The caller owns the transaction boundary. A retry rollback discards the
+        pending failed flush only; successful modules from other scans are
+        committed by their own callers.
     """
     row = _create_module_from_config(db, key, config)
     try:
-        async with db.begin_nested():
-            await db.flush()
+        await db.flush()
     except IntegrityError:
         logger.warning("模块 %s 并发创建冲突，尝试复用已有记录", key)
         await db.rollback()
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(_CONCURRENT_RETRY_DELAY)
         row = await db.scalar(select(Module).where(Module.key == key))
         if row is None:
             logger.error("模块 %s 创建冲突且重试后仍不存在", key)
