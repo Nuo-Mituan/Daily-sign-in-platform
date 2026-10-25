@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..crypto import EncryptionContext, ParameterDecryptionError, parameter_cipher
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from ..deps import AuthContext, get_auth_context, get_current_user
 from ..models import ExecutionLog, Module, ModuleSchedule, PushPool, User
 from ..services.module_icon import (
@@ -35,6 +35,7 @@ from ..services.module_icon import (
     load_icon,
 )
 from ..module_loader import (
+    SyncResult,
     get_module_physical_path,
     ModuleConfig,
     ModuleConfigError,
@@ -51,6 +52,7 @@ from ..scheduling import (
     validate_schedule,
 )
 from ..schemas import (
+    DatabaseUnavailableResponse,
     AccountOut,
     MessageResponse,
     ModuleDetail,
@@ -366,11 +368,31 @@ async def list_modules(db: AsyncSession = Depends(get_db)) -> list[ModuleOut]:
     return result
 
 
-@router.post("/scan", response_model=ScanResponse, summary="扫描模块目录并热加载")
+@router.post(
+    "/scan",
+    response_model=ScanResponse,
+    summary="扫描模块目录并热加载",
+    responses={503: {"model": DatabaseUnavailableResponse}},
+)
 async def scan_modules(db: AsyncSession = Depends(get_db)) -> ScanResponse:
     result = await sync_modules(db)
+    if result.session_rebuilt:
+        await db.close()
+        return await _scan_with_fresh_session(result)
+
     all_modules = await _load_modules(db)
     await scheduler_service.reconcile(all_modules)
+    return _scan_response(result, all_modules)
+
+
+async def _scan_with_fresh_session(result: SyncResult) -> ScanResponse:
+    async with SessionLocal() as fresh_db:
+        all_modules = await _load_modules(fresh_db)
+        await scheduler_service.reconcile(all_modules)
+        return _scan_response(result, all_modules)
+
+
+def _scan_response(result: SyncResult, all_modules: list[Module]) -> ScanResponse:
     message = (
         f"扫描完成：新增 {result.added} 个，更新 {result.updated} 个，"
         f"异常 {len(result.invalid)} 个"
@@ -384,7 +406,12 @@ async def scan_modules(db: AsyncSession = Depends(get_db)) -> ScanResponse:
     )
 
 
-@router.post("/upload", response_model=UploadResponse, summary="上传 ZIP 模块并热安装")
+@router.post(
+    "/upload",
+    response_model=UploadResponse,
+    summary="上传 ZIP 模块并热安装",
+    responses={503: {"model": DatabaseUnavailableResponse}},
+)
 async def upload_module(
     file: UploadFile = File(..., description="ZIP 压缩包"),
     name: str | None = Form(default=None, description="可选：模块标识（目录名）"),
@@ -429,6 +456,33 @@ async def upload_module(
         await file.close()
 
     sync_result = await sync_modules(db)
+    if sync_result.session_rebuilt:
+        await db.close()
+        return await _upload_with_fresh_session(
+            key, sync_result, current_user, context
+        )
+    return await _finish_upload(db, key, sync_result, current_user, context)
+
+
+async def _upload_with_fresh_session(
+    key: str,
+    sync_result: SyncResult,
+    current_user: User,
+    context: AuthContext,
+) -> UploadResponse:
+    async with SessionLocal() as fresh_db:
+        return await _finish_upload(
+            fresh_db, key, sync_result, current_user, context
+        )
+
+
+async def _finish_upload(
+    db: AsyncSession,
+    key: str,
+    sync_result: SyncResult,
+    current_user: User,
+    context: AuthContext,
+) -> UploadResponse:
     module = await db.scalar(select(Module).where(Module.key == key))
     if module is None:
         errors = "；".join(
@@ -495,22 +549,30 @@ _ICON_RATE_CLEANUP = 120.0
 _ICON_RATE_LIMIT = 120
 _ICON_RATE_LAST_CLEANUP = 0.0
 _ICON_DECODE_LOCK = asyncio.Lock()
-def _env_int(name: str, default: int) -> int:
-    raw = os.getenv(name, str(default))
-    try:
-        return int(raw)
-    except ValueError as exc:
-        logger.error("环境变量 %s 必须为整数，当前值: %r", name, raw)
-        raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = os.getenv(name, str(default))
+def _safe_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
     try:
         return float(raw)
-    except ValueError as exc:
-        logger.error("环境变量 %s 必须为数值，当前值: %r", name, raw)
-        raise ValueError(f"{name} must be a number, got {raw!r}") from exc
+    except (ValueError, TypeError):
+        logger.warning(
+            "环境变量 %s=%r 非法，使用默认值 %s", name, raw, default
+        )
+        return default
+
+
+def _safe_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        logger.warning(
+            "环境变量 %s=%r 非法，使用默认值 %s", name, raw, default
+        )
+        return default
 
 
 # Icon decode configuration is loaded lazily on first icon request so that
@@ -518,9 +580,14 @@ def _env_float(name: str, default: float) -> float:
 # ICON_DECODE_POOL_SIZE (4), ICON_DECODE_POOL_MAX (16),
 # ICON_DECODE_TIMEOUT (10.0). Runtime changes require a service restart.
 # TODO: support hot reload through an explicit settings endpoint.
-_ICON_DECODE_POOL_SIZE = 4
-_ICON_DECODE_POOL_MAX = 16
-_ICON_DECODE_TIMEOUT = 10.0
+_ICON_CONFIG_DEFAULTS: dict[str, float] = {
+    "ICON_DECODE_POOL_SIZE": 4,
+    "ICON_DECODE_POOL_MAX": 16,
+    "ICON_DECODE_TIMEOUT": 10.0,
+}
+_ICON_DECODE_POOL_SIZE = int(_ICON_CONFIG_DEFAULTS["ICON_DECODE_POOL_SIZE"])
+_ICON_DECODE_POOL_MAX = int(_ICON_CONFIG_DEFAULTS["ICON_DECODE_POOL_MAX"])
+_ICON_DECODE_TIMEOUT = float(_ICON_CONFIG_DEFAULTS["ICON_DECODE_TIMEOUT"])
 _ICON_CONFIG_INITIALIZED = False
 _ICON_CONFIG_LOCK = Lock()
 _ACTIVE_ICON_EVENTS: "WeakSet[Event]" = WeakSet()
@@ -540,9 +607,18 @@ def _load_icon_config() -> None:
     with _ICON_CONFIG_LOCK:
         if _ICON_CONFIG_INITIALIZED:
             return
-        size = _env_int("ICON_DECODE_POOL_SIZE", 4)
-        maximum = _env_int("ICON_DECODE_POOL_MAX", 16)
-        timeout = _env_float("ICON_DECODE_TIMEOUT", 10.0)
+        size = _safe_int_env(
+            "ICON_DECODE_POOL_SIZE",
+            int(_ICON_CONFIG_DEFAULTS["ICON_DECODE_POOL_SIZE"]),
+        )
+        maximum = _safe_int_env(
+            "ICON_DECODE_POOL_MAX",
+            int(_ICON_CONFIG_DEFAULTS["ICON_DECODE_POOL_MAX"]),
+        )
+        timeout = _safe_float_env(
+            "ICON_DECODE_TIMEOUT",
+            _ICON_CONFIG_DEFAULTS["ICON_DECODE_TIMEOUT"],
+        )
         new_size = max(1, min(size, maximum))
         if _ICON_DECODE_POOL is None:
             _ICON_DECODE_POOL = concurrent.futures.ThreadPoolExecutor(
@@ -577,7 +653,12 @@ def _tracked_load_icon(candidate: Path) -> tuple[bytes, str, int]:
 
 
 def shutdown_icon_decode_pool() -> None:
-    """Stop accepting work and wait for tracked decode events."""
+    """Stop accepting work and wait for tracked decode events.
+
+    Events are set exclusively by worker threads in _tracked_load_icon;
+    shutdown only waits and logs. Timed-out tasks are not forcefully
+    terminated because Python ThreadPoolExecutor does not support interruption.
+    """
     if _ICON_DECODE_POOL is None:
         return
     try:
@@ -587,9 +668,11 @@ def shutdown_icon_decode_pool() -> None:
         if not events:
             logger.warning("图标解码线程池关闭时没有活动任务")
         for event in events:
-            if not event.wait(timeout=5):
-                logger.warning("图标解码任务未在超时内退出，强制结束线程池")
-            event.set()
+            completed = event.wait(timeout=5)
+            if not completed:
+                logger.warning(
+                    "图标解码任务未在5秒内完成，线程可能仍在运行"
+                )
         _ACTIVE_ICON_EVENTS.clear()
     except Exception:
         logger.warning("图标解码线程池关闭失败", exc_info=True)

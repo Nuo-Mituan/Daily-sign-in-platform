@@ -418,3 +418,12 @@ class RuntimeMetricsOut(BaseModel):
     ring: dict[str, object]
     sse: dict[str, object]
     push_outbox_pending: int
+    db_log_rate_limiter: dict[str, int] = Field(default_factory=dict)
+
+
+class DatabaseUnavailableResponse(BaseModel):
+    detail: str = Field(
+        default="数据库连接异常，请稍后重试",
+        description="Human-readable error message",
+        examples=["数据库连接异常，请稍后重试"],
+    )

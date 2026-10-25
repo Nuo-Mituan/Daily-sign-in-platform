@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
+import re
+import time
+from threading import Lock
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .module_loader import DatabaseUnavailableError, flush_decay_state_on_shutdown
 from .database import SessionLocal, dispose_db, init_db
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -135,6 +140,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         modules.shutdown_icon_decode_pool()
+        flush_decay_state_on_shutdown()
         scheduler_service.shutdown()
         await shutdown_background_tasks()
         hub.close_all()
@@ -159,6 +165,248 @@ app = FastAPI(
         {"name": "系统", "description": "健康检查与元信息"},
     ],
 )
+
+_DB_LOG_RATE_LIMIT_SECONDS: float = 10.0
+_DB_LOG_MAX_EVENT_TYPES: int = 256
+_db_log_lock = Lock()
+_db_log_last_emit: dict[str, float] = {}
+_db_log_suppressed_count: dict[str, int] = {}
+_db_log_suppressed_total: int = 0
+_db_log_overflow_count: int = 0
+
+
+def get_db_log_suppression_stats() -> dict[str, int]:
+    """Return an atomic snapshot of suppressed DB log counts."""
+    now = time.monotonic()
+
+    # 锁外候选预筛选：只读时间戳，无副作用，减少锁内遍历时间。
+    # Safe snapshot: prevents RuntimeError if the dict changes concurrently
+    # and works on future no-GIL Python builds.
+    items_snapshot = list(_db_log_last_emit.items())
+    candidate_expired = [
+        key
+        for key, stamp in items_snapshot
+        if now - stamp > _DB_LOG_RATE_LIMIT_SECONDS
+    ]
+
+    with _db_log_lock:
+        # 锁内二次确认，避免并发写入使候选 key 重新变为活跃。
+        for key in candidate_expired:
+            if (
+                now - _db_log_last_emit.get(key, now)
+                > _DB_LOG_RATE_LIMIT_SECONDS
+            ):
+                del _db_log_last_emit[key]
+                _db_log_suppressed_count.pop(key, None)
+
+        suppressed_snapshot = dict(_db_log_suppressed_count)
+        active_types_count = len(_db_log_last_emit)
+        overflow_count = _db_log_overflow_count
+        suppressed_total = _db_log_suppressed_total
+
+    return {
+        "db_logs_suppressed_total": suppressed_total,
+        "db_log_active_event_types": active_types_count,
+        "db_log_overflow_count": overflow_count,
+    }
+
+
+def get_db_log_rate_limiter_snapshot() -> dict[str, int]:
+    """Expose rate limiter internal pressure metrics for observability."""
+    with _db_log_lock:
+        return {
+            "db_log_active_event_types": len(_db_log_last_emit),
+            "db_log_suppressed_total": _db_log_suppressed_total,
+            "db_log_overflow_evictions": _db_log_overflow_count,
+        }
+
+
+def reset_db_log_rate_limits() -> None:
+    global _db_log_overflow_count, _db_log_suppressed_total
+    with _db_log_lock:
+        _db_log_last_emit.clear()
+        _db_log_suppressed_count.clear()
+        _db_log_overflow_count = 0
+        _db_log_suppressed_total = 0
+
+
+def _evict_event_type(key: str) -> None:
+    """Remove an event type from both dicts with desync observability."""
+    in_last = key in _db_log_last_emit
+    in_supp = key in _db_log_suppressed_count
+    if in_last != in_supp:
+        logger.error(
+            "DB log state desync for key %r: in_last_emit=%s, "
+            "in_suppressed=%s. Proceeding with best-effort eviction.",
+            key,
+            in_last,
+            in_supp,
+        )
+    _db_log_last_emit.pop(key, None)
+    _db_log_suppressed_count.pop(key, None)
+
+
+def _should_emit_db_log(event_type: str) -> bool:
+    """Return True when a full DB error log should be emitted."""
+    global _db_log_overflow_count, _db_log_suppressed_total
+    now = time.monotonic()
+    with _db_log_lock:
+        # 独立过期清理，不依赖容量是否已满；过期项集中在头部。
+        for key in list(_db_log_last_emit.keys()):
+            if (
+                now - _db_log_last_emit[key]
+                >= _DB_LOG_RATE_LIMIT_SECONDS
+            ):
+                _evict_event_type(key)
+            else:
+                break
+
+        is_existing = event_type in _db_log_last_emit
+        last = _db_log_last_emit.get(event_type, 0.0)
+        should_emit = now - last >= _DB_LOG_RATE_LIMIT_SECONDS
+
+        if should_emit:
+            if is_existing:
+                _db_log_last_emit.pop(event_type, None)
+            if len(_db_log_last_emit) >= _DB_LOG_MAX_EVENT_TYPES:
+                oldest = next(iter(_db_log_last_emit))
+                _db_log_last_emit.pop(oldest, None)
+                _db_log_suppressed_count.pop(oldest, None)
+                _db_log_overflow_count += 1
+
+            suppressed = _db_log_suppressed_count.pop(event_type, 0)
+            if suppressed:
+                logger.warning(
+                    "Suppressed %d duplicate %s logs in last %.0fs",
+                    suppressed,
+                    event_type,
+                    _DB_LOG_RATE_LIMIT_SECONDS,
+                )
+            _db_log_last_emit[event_type] = now
+            _db_log_suppressed_count[event_type] = 0
+            return True
+
+        previous_suppressed = _db_log_suppressed_count.get(event_type, 0)
+        if is_existing:
+            _evict_event_type(event_type)
+        _db_log_last_emit[event_type] = now
+        _db_log_suppressed_count[event_type] = previous_suppressed + 1
+        _db_log_suppressed_total += 1
+        return False
+
+
+_LOG_FIELD_MAX_LEN: int = 4096
+
+
+_TRUNCATE_SUFFIX: str = "...[truncated]"
+
+
+def _safe_log_field(value: object) -> str:
+    """Convert to string, truncate safely, then sanitize credentials."""
+    text = str(value) if value is not None else ""
+    if len(text) > _LOG_FIELD_MAX_LEN:
+        truncated = text[:_LOG_FIELD_MAX_LEN]
+        last_safe = max(
+            truncated.rfind(" "),
+            truncated.rfind(","),
+            truncated.rfind(";"),
+            truncated.rfind("\n"),
+        )
+        if last_safe > _LOG_FIELD_MAX_LEN // 2:
+            truncated = truncated[:last_safe]
+        text = truncated + _TRUNCATE_SUFFIX
+    return _sanitize_db_error(text)
+
+
+def _truncate_log_field(
+    value: str, max_len: int = _LOG_FIELD_MAX_LEN
+) -> str:
+    """Truncate log field to prevent oversized log records."""
+    if len(value) <= max_len:
+        return value
+    return value[:max_len] + "...[truncated]"
+
+
+def _sanitize_db_error(message: str) -> str:
+    """Mask passwords in database connection strings before logging."""
+    return re.sub(
+        r"(?P<scheme>[a-zA-Z0-9+.-]+://[^:@\s]+:)(?P<password>[^:@\s]+)(?P<rest>@)",
+        r"\g<scheme>***\g<rest>",
+        message,
+    )
+
+
+@app.exception_handler(OperationalError)
+async def sqlalchemy_connection_handler(
+    request: Request, exc: OperationalError
+) -> JSONResponse:
+    """Translate connection-level OperationalError to 503; other errors -> 500."""
+    orig = getattr(exc, "orig", None)
+    message = str(orig).lower() if orig else ""
+    is_connection_error = isinstance(
+        orig, (socket.timeout, ConnectionError, OSError)
+    )
+    is_db_shutdown = any(
+        token in message
+        for token in (
+            "server closed the connection",
+            "connection refused",
+            "no such file or directory",
+            "admin shutdown",
+        )
+    )
+    if not (is_connection_error or is_db_shutdown):
+        safe_warning_stmt = _safe_log_field(exc.statement)
+        if _should_emit_db_log("db_non_connection_error"):
+            logger.warning(
+                "Non-connection OperationalError re-raised as 500",
+                extra={
+                    "db_stmt": safe_warning_stmt,
+                    "db_orig_type": type(orig).__name__,
+                    "event": "db_non_connection_error",
+                },
+            )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Full DB error traceback (may contain secrets):",
+                exc_info=True,
+            )
+        raise HTTPException(
+            status_code=500, detail="Internal Server Error"
+        ) from exc
+    safe_stmt = _safe_log_field(exc.statement)
+    safe_params = _safe_log_field(exc.params)
+    if _should_emit_db_log("db_connection_error"):
+        logger.error(
+            "Database connection failed",
+            extra={
+                "db_stmt": safe_stmt,
+                "db_params": safe_params,
+                "db_orig_type": type(orig).__name__,
+                "event": "db_connection_error",
+            },
+            exc_info=False,
+        )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Full DB error traceback (may contain secrets):",
+            exc_info=True,
+        )
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "数据库服务暂时不可用，请稍后重试"},
+    )
+
+
+@app.exception_handler(DatabaseUnavailableError)
+async def database_unavailable_handler(
+    request: Request, exc: DatabaseUnavailableError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "数据库连接异常，请稍后重试"},
+    )
+
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(

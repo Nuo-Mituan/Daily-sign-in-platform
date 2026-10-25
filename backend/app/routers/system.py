@@ -177,8 +177,11 @@ async def system_logs(
     "/metrics", response_model=RuntimeMetricsOut, summary="只读运行时指标"
 )
 async def runtime_metrics() -> RuntimeMetricsOut:
+    from ..main import get_db_log_rate_limiter_snapshot
+
     return RuntimeMetricsOut(
         ring=await ring_log.stats_async(),
         sse=hub.metrics(),
         push_outbox_pending=await outbox_pending_count(),
+        db_log_rate_limiter=get_db_log_rate_limiter_snapshot(),
     )
