@@ -22,7 +22,7 @@ from .module_loader import DatabaseUnavailableError, flush_decay_state_on_shutdo
 from .database import SessionLocal, dispose_db, init_db
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
-from .routers import auth, dashboard, logs, modules, push, system
+from .routers import auth, dashboard, logs, metrics, modules, push, system
 from .services.bootstrap import initialize_modules, load_all_modules, seed_admin
 from .services.legacy_wash import wash_legacy_admin_credentials
 from .services.capture import install_stdout_router
@@ -179,26 +179,9 @@ def get_db_log_suppression_stats() -> dict[str, int]:
     """Return an atomic snapshot of suppressed DB log counts."""
     now = time.monotonic()
 
-    # 锁外候选预筛选：只读时间戳，无副作用，减少锁内遍历时间。
-    # Safe snapshot: prevents RuntimeError if the dict changes concurrently
-    # and works on future no-GIL Python builds.
-    items_snapshot = list(_db_log_last_emit.items())
-    candidate_expired = [
-        key
-        for key, stamp in items_snapshot
-        if now - stamp > _DB_LOG_RATE_LIMIT_SECONDS
-    ]
+    _cleanup_expired_db_log_types(now)
 
     with _db_log_lock:
-        # 锁内二次确认，避免并发写入使候选 key 重新变为活跃。
-        for key in candidate_expired:
-            if (
-                now - _db_log_last_emit.get(key, now)
-                > _DB_LOG_RATE_LIMIT_SECONDS
-            ):
-                del _db_log_last_emit[key]
-                _db_log_suppressed_count.pop(key, None)
-
         suppressed_snapshot = dict(_db_log_suppressed_count)
         active_types_count = len(_db_log_last_emit)
         overflow_count = _db_log_overflow_count
@@ -211,8 +194,21 @@ def get_db_log_suppression_stats() -> dict[str, int]:
     }
 
 
+def _cleanup_expired_db_log_types(now: float) -> None:
+    """Remove event types not seen within the rate-limit window."""
+    with _db_log_lock:
+        expired = [
+            key for key, stamp in _db_log_last_emit.items()
+            if now - stamp >= _DB_LOG_RATE_LIMIT_SECONDS
+        ]
+        for key in expired:
+            _evict_event_type(key)
+
+
 def get_db_log_rate_limiter_snapshot() -> dict[str, int]:
     """Expose rate limiter internal pressure metrics for observability."""
+    now = time.monotonic()
+    _cleanup_expired_db_log_types(now)
     with _db_log_lock:
         return {
             "db_log_active_event_types": len(_db_log_last_emit),
@@ -440,6 +436,7 @@ app.include_router(system.meta_router, prefix=api)
 app.include_router(system.settings_router, prefix=api)
 app.include_router(system.system_router, prefix=api)
 app.include_router(system.health_router, prefix=api)
+app.include_router(metrics.router)
 
 
 @app.get("/api", include_in_schema=False)

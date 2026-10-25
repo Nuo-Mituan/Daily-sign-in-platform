@@ -419,6 +419,8 @@ class RuntimeMetricsOut(BaseModel):
     sse: dict[str, object]
     push_outbox_pending: int
     db_log_rate_limiter: dict[str, int] = Field(default_factory=dict)
+    pool_metrics: dict[str, int] = Field(default_factory=dict)
+    stripe_contention: dict[str, float] = Field(default_factory=dict)
 
 
 class DatabaseUnavailableResponse(BaseModel):

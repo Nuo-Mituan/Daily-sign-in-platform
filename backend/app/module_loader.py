@@ -816,6 +816,24 @@ _REGISTERED_POOL_ID: int = 0
 _REGISTERED_POOL_EVENT_KEYS: set[tuple[int, str]] = set()
 _POOL_EVENTS_FULLY_REGISTERED: bool = False
 _POOL_REGISTRATION_LOCK = threading.RLock()
+_POOL_EVENTS_LAST_ATTEMPT: float = 0.0
+_POOL_EVENTS_RETRY_INTERVAL: float = 60.0
+
+
+def _maybe_retry_pool_registration() -> None:
+    global _POOL_EVENTS_LAST_ATTEMPT
+    if _POOL_EVENTS_FULLY_REGISTERED:
+        try:
+            from .database import engine
+            if id(engine.pool) == _REGISTERED_POOL_ID:
+                return
+        except Exception:
+            return
+    now = time.monotonic()
+    if now - _POOL_EVENTS_LAST_ATTEMPT < _POOL_EVENTS_RETRY_INTERVAL:
+        return
+    _POOL_EVENTS_LAST_ATTEMPT = now
+    _register_pool_events()
 
 
 def _is_current_pool(record: object) -> bool:
@@ -910,6 +928,7 @@ def get_pool_metrics_snapshot() -> dict[str, int]:
     are logged and coerced to 0. Mutating the returned dict never affects
     internal counters.
     """
+    _maybe_retry_pool_registration()
     with _POOL_EVENT_LOCK:
         result: dict[str, int] = {}
         for pool_key in POOL_METRIC_KEYS:
@@ -926,10 +945,16 @@ def get_pool_metrics_snapshot() -> dict[str, int]:
 
 
 def _reset_pool_metrics() -> None:
-    """Reset cumulative pool counters when a new Pool is bound."""
+    """Reset cumulative pool counters and caches atomically."""
+    global _POOL_METRICS_CACHE, _POOL_METRICS_TS
+    global _pool_instant_cache, _pool_instant_cache_ts
     with _POOL_EVENT_LOCK:
         for key in _POOL_EVENT_COUNTERS:
             _POOL_EVENT_COUNTERS[key] = 0
+        _POOL_METRICS_CACHE = {}
+        _POOL_METRICS_TS = 0.0
+        _pool_instant_cache = {}
+        _pool_instant_cache_ts = 0.0
 
 
 def _register_pool_events_locked() -> None:
@@ -1004,7 +1029,7 @@ def register_pool_metrics_refresh_callback(
 def _get_pool_metrics() -> dict[str, int]:
     global _POOL_METRICS_CACHE, _POOL_METRICS_TS
     now = time.monotonic()
-    with _STRIPE_GUARD:
+    with _POOL_EVENT_LOCK:
         if now - _POOL_METRICS_TS < _POOL_METRICS_TTL and _POOL_METRICS_CACHE:
             return dict(_POOL_METRICS_CACHE)
         from .database import engine
@@ -1029,7 +1054,7 @@ def _get_pool_metrics() -> dict[str, int]:
 def invalidate_pool_metrics_cache() -> None:
     """Force pool metrics to be re-read on next access."""
     global _POOL_METRICS_TS
-    with _STRIPE_GUARD:
+    with _POOL_EVENT_LOCK:
         _POOL_METRICS_TS = 0.0
 
 
@@ -1041,26 +1066,27 @@ _pool_instant_cache_ts: float = 0.0
 def _get_pool_instant_metrics() -> dict[str, int | float]:
     global _pool_instant_cache, _pool_instant_cache_ts
     now = time.monotonic()
-    if now - _pool_instant_cache_ts < _POOL_INSTANT_CACHE_TTL:
-        return dict(_pool_instant_cache)
-    try:
-        from .database import engine
-        pool = engine.pool
-        current_out = pool.checkedout() if hasattr(pool, "checkedout") else 0
-        current_size = pool.size() if hasattr(pool, "size") else 0
-    except Exception:
-        current_out = 0
-        current_size = 0
-    result = {
-        "pool_current_checked_out": int(current_out),
-        "pool_current_size": int(current_size),
-        "pool_utilization": (
-            current_out / current_size if current_size > 0 else 0.0
-        ),
-    }
-    _pool_instant_cache = result
-    _pool_instant_cache_ts = now
-    return result
+    with _POOL_EVENT_LOCK:
+        if now - _pool_instant_cache_ts < _POOL_INSTANT_CACHE_TTL:
+            return dict(_pool_instant_cache)
+        try:
+            from .database import engine
+            pool = engine.pool
+            current_out = pool.checkedout() if hasattr(pool, "checkedout") else 0
+            current_size = pool.size() if hasattr(pool, "size") else 0
+        except Exception:
+            current_out = 0
+            current_size = 0
+        result = {
+            "pool_current_checked_out": int(current_out),
+            "pool_current_size": int(current_size),
+            "pool_utilization": (
+                current_out / current_size if current_size > 0 else 0.0
+            ),
+        }
+        _pool_instant_cache = result
+        _pool_instant_cache_ts = now
+        return result
 
 
 def get_stripe_contention_stats() -> dict[str, int | float]:

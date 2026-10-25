@@ -178,10 +178,21 @@ async def system_logs(
 )
 async def runtime_metrics() -> RuntimeMetricsOut:
     from ..main import get_db_log_rate_limiter_snapshot
+    from ..module_loader import (
+        get_pool_metrics_snapshot,
+        get_stripe_contention_stats,
+    )
+
+    pool_metrics, stripe_contention = await asyncio.gather(
+        asyncio.to_thread(get_pool_metrics_snapshot),
+        asyncio.to_thread(get_stripe_contention_stats),
+    )
 
     return RuntimeMetricsOut(
         ring=await ring_log.stats_async(),
         sse=hub.metrics(),
         push_outbox_pending=await outbox_pending_count(),
         db_log_rate_limiter=get_db_log_rate_limiter_snapshot(),
+        pool_metrics=pool_metrics,
+        stripe_contention=stripe_contention,
     )
