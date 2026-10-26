@@ -270,9 +270,13 @@ daily-checkin-platform/
 │   └── verify_api.py               # 容器内执行的核心 API 验证
 ├── verify_docker.sh                # 一键 Docker 部署验证
 ├── docs/
-│   ├── MODULE_DEVELOPMENT.md       # 模块开发规范
+│   ├── README.md                   # 文档索引
+│   ├── MODULE_DEVELOPMENT.md       # 模块开发规范（含 directory_name / legacy_key / 图标）
 │   ├── PRODUCTION_SECURITY.md      # 内网部署安全指南
 │   ├── BACKUP_AND_MIGRATION.md     # 备份、恢复与迁移
+│   ├── UNIFIED_PUSH.md             # 统一推送说明
+│   ├── playbooks/                  # 状态机重构 Playbook 与团队赋能材料
+│   ├── runbooks/                   # 金丝雀发布与回滚检查清单
 │   └── screenshots/
 ├── backend/tests/                  # 单元测试 + API 冒烟测试
 ├── Dockerfile
@@ -287,8 +291,8 @@ daily-checkin-platform/
 ```text
 data/checkin.db          # SQLite 数据库
 data/.secret_key         # 自动生成的密钥（未配置 SECRET_KEY 时）
-modules/<key>/           # 模块目录，挂载到宿主机
-logs/executions/<key>/   # 执行日志文件镜像
+modules/<directory_name>/ # 模块物理目录；未设置时回退为 API key
+logs/executions/<key>/    # 执行日志文件镜像，按 API key 分组
 ```
 
 ---
@@ -335,7 +339,7 @@ logs/executions/<key>/   # 执行日志文件镜像
 | 类型 | `icon` 示例 | 说明 |
 | --- | --- | --- |
 | Emoji / 文本 | `"icon": "🎯"` | 原样文本渲染，保留原有底色 |
-| 本地 ICO | `"icon": "./favicon.ico"` | 读取 `modules/<module-key>/` 内的文件；后端转 RGBA PNG |
+| 本地 ICO | `"icon": "./favicon.ico"` | 读取 `modules/<directory_name>/`（未设置时回退 `<key>`）内的文件；后端转 RGBA PNG |
 | Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon`、`png`、`svg+xml`，≤64KB |
 | HTTPS URL | `"icon": "https://example.com/icon.png"` | 远程图片；加载失败降级为 ⚠️ |
 
@@ -359,7 +363,8 @@ modules/
 
 安全约束：
 
-- 仅允许 `modules/<module-key>/` 自身目录内的相对路径，拒绝 `..`、绝对路径、反斜杠和空字节。
+- 仅允许模块物理目录（`directory_name`，未设置时回退 `key`）自身目录内的相对路径，
+  拒绝 `..`、绝对路径、反斜杠和空字节。
 - 使用 `resolve()` 后的真实路径前缀校验，阻断软链接逃逸；路径不存在或越界直接拒绝。
 - 文件大小 ≤64KB、解码尺寸 ≤1024×1024；文件头必须是 ICO magic `00 00 01 00`。
 - 后端使用 Pillow 以 RGBA 打开并转存 PNG，透明 Alpha 通道不会在后端丢失。
@@ -446,6 +451,7 @@ modules/
   "name": "某平台签到",
   "description": "自动完成某平台每日签到",
   "author": "your-name",
+  "directory_name": "acme_checkin",
   "version": "1.0.0",
   "icon": "🎯",
   "default_start_time": "08:00",
@@ -490,6 +496,32 @@ async def run(params: dict[str, Any]) -> dict[str, Any]:
 ```
 
 模块不需要遍历账号列表、不需要实现随机时间、也不需要发送推送。平台会负责这些平台级能力。
+
+### 物理目录与 API key
+
+模块有两个标识，不要混用：
+
+| 字段 | 含义 | 说明 |
+| --- | --- | --- |
+| `key` | API / 数据库中的稳定标识 | 对外 URL、执行日志目录和账号配置均按 `key` 索引。 |
+| `directory_name` | `modules/` 下的真实物理目录名 | 未设置时回退为 `key`；只允许字母、数字、下划线、短横线，最长 80 字符。 |
+| `legacy_key` | 目录改名时显式保留的旧 API key | 仅在旧 key 对应目录已不存在时生效，避免两个模块串用配置。 |
+
+因此 `config.json` 中的 `name` 只是显示名称，目录名可以通过 `directory_name` 与 API key
+独立演进。声明 `directory_name` 时必须与磁盘实际目录名一致；修改目录名后重新扫描模块即可
+同步数据库。若希望保留原 API key，必须同时声明
+`legacy_key`。模块列表/详情接口会返回 `directory_name`、`legacy_key`、
+`physical_directory` 和 `migration_status`，便于前端与运维排查目录迁移状态。
+
+目录改名并保留旧 API key 的示例：
+
+```json
+{
+  "name": "Acme 签到",
+  "directory_name": "acme_checkin_v2",
+  "legacy_key": "acme_checkin"
+}
+```
 
 安装方式：
 
@@ -644,9 +676,15 @@ format=ICO mode=RGBA alpha_min=0 alpha_max=255
 ### 质量检查
 
 ```bash
-pytest backend/tests          # 84 passed
-mypy backend/app              # 类型检查
-cd frontend && npm run build  # 生产构建验证
+pytest backend/tests                    # 默认快速测试：221 passed
+pytest backend/tests -m property        # PBT 契约测试：5 passed
+pytest backend/tests/benchmark -m benchmark --benchmark-only  # 3 passed
+mypy backend/app/main.py backend/app/module_loader.py \
+  backend/app/routers/system.py backend/app/routers/metrics.py \
+  backend/app/routers/modules.py backend/app/services/module_icon.py \
+  backend/app/services/module_upload.py backend/app/migrate_modules.py \
+  backend/app/schemas.py                # 类型检查
+cd frontend && npm run build            # 生产构建验证
 ```
 
 ## 生产安全加固
@@ -715,8 +753,11 @@ docker compose up -d
 
 - 平台使用 HttpOnly Cookie 会话与 CSRF Header 校验；密码使用 PBKDF2-HMAC-SHA256 加盐存储。
 - 模块参数使用 AES-256-GCM v2 加密，AAD 绑定用户、模块与账号；旧 Fernet 密文自动升级。
-- 所有管理接口均需要登录；公开访问的只有 `/api/health`、`/docs` 和 OpenAPI 描述。
-  未登录访问 `/api/modules/*`、`/api/dashboard/*`、`/api/push/*`、`/api/logs/*` 均返回 401。
+- 所有管理接口均需要登录；公开访问的只有 `/api/health`、`/metrics`（Prometheus 文本指标）、
+  `/api/modules/icon`（模块图标，供 `<img>` 使用）、`/docs` 和 OpenAPI 描述。
+  未登录访问 `/api/modules/*`（图标端点 `/api/modules/icon` 除外）、`/api/dashboard/*`、
+  `/api/push/*`、`/api/logs/*`、`/api/system/*` 均返回 401；运维抓取连接池与限流器 JSON
+  指标需使用认证后的 `/api/system/metrics`，或直接抓取公开的 `/metrics`。
 - 未登录登录页不渲染任何模块名称、时间窗、账号数量或 `schedule-preview` 预览；
   受保护路由统一跳转登录页，模块/推送/日志接口在未认证时返回 401。
 - 登录失败使用统一文案并执行一次占位密码校验，降低用户名枚举风险；修改用户名/密码需验证当前密码，
@@ -822,7 +863,8 @@ docker compose up -d
 - Base64 图标增加 MIME 白名单与前后端双重正则校验，失败统一降级为 ⚠️。
 - 新增 `ModuleIcon.vue`、图标 URL 安全构造函数、`scripts/check_icon_alpha.py` 诊断工具。
 - 数据库新增 `icon_source` / `icon_data` 字段，SQLite/PostgreSQL 启动迁移。
-- 测试集扩展至 84 个安全与功能用例，前端生产构建通过。
+- 新增模块配置物理模块目录名。
+- 当前测试矩阵：221 个默认测试、5 个 PBT 契约测试、3 个基准测试；前端生产构建通过。
 
 ### v1.0.2
 
@@ -856,6 +898,9 @@ FastAPI 自动生成的交互式文档：**`/docs`**
 | `GET` | `/api/logs/{id}` | 执行详情与输出 |
 | `GET` | `/api/logs/{id}/stream` | SSE 实时日志流 |
 | `DELETE` | `/api/logs` | 清空执行记录（可按模块） |
+| `GET` | `/api/modules/icon` | 模块图标（公开；按 `directory_name` 读取） |
+| `GET` | `/api/system/metrics` | 运行时指标：环形日志、SSE、限流器、连接池与锁竞争（需登录） |
+| `GET` | `/metrics` | Prometheus 文本指标（公开；DB 日志限流器压力指标） |
 | `GET` | `/api/health` | 健康检查（无需登录） |
 | `GET` | `/api/meta` | 系统元信息（周期选项、账号间隔等） |
 

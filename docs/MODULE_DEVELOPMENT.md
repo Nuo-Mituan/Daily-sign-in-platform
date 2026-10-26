@@ -1,8 +1,8 @@
 # 模块开发指南
 
-本指南适用于签到云台 **1.0.0+**。模块仍然是一个可热插拔的目录，但调度方式已经从
-「每个模块一条固定 Cron」升级为「按周期随机生成执行时间」，并新增了多账号串行执行与
-平台级统一推送。
+本指南适用于签到云台 **1.0.5+**。模块仍然是可热插拔目录，但调度方式已从固定 Cron
+升级为「按周期随机生成执行时间」，并支持多账号串行、统一推送、模块物理目录映射与
+多源模块图标。当前模块契约以本文档和「模块开发指南」页面为准。
 
 > 重要：模块代码**不需要**处理账号列表、随机时间、账号间隔或推送。平台会为多账号模块
 > 的每个账号分别调用一次 `run(params)`，然后负责汇总、日志和通知。
@@ -52,7 +52,54 @@ modules/
 5. 执行时按需重新导入 `main.py`，因此修改代码后下一次执行立即生效；
 6. 删除模块时默认同时删除目录，也可以只删数据库记录（保留文件）。
 
-模块目录名就是模块 `key`，必须匹配 `[A-Za-z0-9_-]+`。
+### 2.1 API key、物理目录与 legacy_key
+
+模块有两个不同的身份：
+
+| 名称 | 所在位置 | 用途 |
+| --- | --- | --- |
+| `key` | 数据库 / API / 执行日志 | 稳定 API 标识，对外 URL、账号配置与日志目录都按它索引。 |
+| `directory_name` | `config.json` / `modules/` | 真实物理目录名；未声明时回退为 `key`，便于目录名与 API key 独立演进。 |
+| `legacy_key` | `config.json` | 目录改名时显式声明要保留的旧 API key。 |
+
+规则：
+
+- `key` 与 `directory_name` 都必须匹配 `[A-Za-z0-9][A-Za-z0-9_-]{0,79}`，
+  最长 80 字符；
+- `directory_name` 为空或省略时，平台读取 `modules/<key>/`；
+- 声明 `directory_name` 时，它**必须与磁盘上的实际目录名一致**；平台按它解析图标、
+  执行和删除路径，不会自动重命名目录；
+- 修改物理目录名后，在网页端重新「扫描目录」即可同步数据库；
+- 希望保留原 API key 时，`config.json` 必须同时声明 `legacy_key`；
+- `legacy_key` 只会在旧 key 对应目录已不存在、且旧记录未绑定其它目录时生效，
+  防止两个同名模块串用账号配置；
+- `legacy_key` 同样必须匹配 `[A-Za-z0-9][A-Za-z0-9_-]{0,79}`；
+- 若两个模块声明同一个物理目录，扫描/上传会被拒绝（数据库唯一索引与冲突检查）；
+- 不要仅凭显示名称 `name` 判断模块身份。
+
+模块列表/详情接口额外返回：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `directory_name` | string / null | 数据库保存的物理目录名。 |
+| `legacy_key` | string / null | 目录改名时显式保留的旧 API key。 |
+| `physical_directory` | string | 实际读取的目录：`directory_name or key`。 |
+| `migration_status` | string | `ok`：映射存在、目录存在且与 key 一致；`needs_legacy_key`：旧记录尚未写入 `directory_name`；`directory_mismatch`：映射与 key 不同或目录不存在。 |
+
+> 图标、执行加载、ZIP 覆盖与删除都使用 `physical_directory`；API 调用仍使用 `key`。
+
+目录改名并保留旧 API key 的示例：
+
+```json
+{
+  "name": "Acme 签到",
+  "directory_name": "acme_checkin_v2",
+  "legacy_key": "acme_checkin"
+}
+```
+
+只有当旧记录仍使用 `legacy_key`、且旧目录已不存在时，平台才会复用旧记录；否则会作为
+新模块处理并参与目录唯一性冲突检查。
 
 ---
 
@@ -65,6 +112,7 @@ modules/
   "name": "Acme 签到",
   "description": "自动完成 Acme 每日签到",
   "author": "your-name",
+  "directory_name": "acme_checkin",
   "version": "2.0.0",
   "icon": "🛰️",
   "default_start_time": "09:00",
@@ -112,7 +160,11 @@ modules/
 | `description` | string | 否 | `""` | 模块描述，最长 2000 字符。 |
 | `author` | string | 否 | `""` | 作者 / 维护者。 |
 | `version` | string | 否 | `"1.0.0"` | 模块版本。 |
-| `icon` | string | 否 | `"🧩"` | emoji 图标。 |
+| `icon` | string | 否 | `"🧩"` | Emoji、本地 ICO、Base64 Data URI 或 HTTPS URL。 |
+| `directory_name` | string | 否 | 回退 `key` | 物理模块目录名；`[A-Za-z0-9][A-Za-z0-9_-]{0,79}`。 |
+| `legacy_key` | string | 否 | — | 目录改名时显式保留的旧 API key。 |
+| `icon_source` | string | 否 | `"url"` | **旧兼容字段**：`url` / `base64` / `local`。 |
+| `icon_data` | string | 否 | — | **旧兼容字段**：旧版 base64 图标数据。 |
 | `default_start_time` | string | 否 | 旧 Cron 推导或 `08:00` | 默认开始时间，24 小时制 `HH:mm`。 |
 | `default_end_time` | string | 否 | 旧 Cron 推导或 `10:00` | 默认结束时间，必须晚于开始时间。 |
 | `default_repeat_cycle` | string | 否 | `"daily"` | `daily` / `weekly` / `monthly_15` / `monthly` / `yearly`。 |
@@ -155,6 +207,27 @@ modules/
 - 旧周期 `half_month` / `quarterly` 会在启动迁移时自动降级为
   `monthly` + `"1"`（每月 1 日），并写入迁移日志。
 
+### 3.5 模块图标
+
+`icon` 支持四种形式；旧字段 `icon_source` / `icon_data` 继续兼容：
+
+| 类型 | 示例 | 说明 |
+| --- | --- | --- |
+| Emoji / 文本 | `"icon": "🎯"` | 原样渲染，保留 Emoji 底色。 |
+| 本地 ICO | `"icon": "./favicon.ico"` | 读取 `modules/<physical_directory>/` 内的文件，后端转为 RGBA PNG。 |
+| Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon` / `png` / `svg+xml`，≤64KB。 |
+| HTTPS URL | `"icon": "https://example.com/icon.png"` | 加载失败降级为 `⚠️`。 |
+
+安全约束：
+
+- 本地路径只允许模块物理目录内的相对路径，拒绝 `..`、绝对路径、反斜杠和空字节；
+- 使用 `resolve()` 后的真实路径前缀校验，阻断软链接逃逸；
+- ICO 文件 ≤64KB、尺寸 ≤1024×1024，文件头必须是 `00 00 01 00`；
+- 后端使用 Pillow 以 RGBA 打开并转 PNG，保留 Alpha 透明通道；
+- 图片加载/解码失败统一降级为 `⚠️`，不抛出未捕获异常。
+
+图标接口：`GET /api/modules/icon?key=<key>`（公开，供 `<img>` 加载）。
+
 ---
 
 ## 4. 参数定义
@@ -174,6 +247,7 @@ modules/
 | `min` / `max` / `step` | number 专用。 |
 | `rows` | textarea 专用，2–20。 |
 | `account_label` | 多账号模式可选；标记用于日志/推送脱敏展示的账号标识字段。 |
+| `sensitive` | 可选；声明为敏感参数。`password` / `cookie` / `token` / `secret` / `key` 等字段也会自动推断。 |
 
 ### 4.1 `account_label`
 
@@ -205,10 +279,13 @@ modules/
 
 ### 4.2 参数加密
 
-- `password` 类型只是输入时隐藏，**所有类型**都会在服务端用 Fernet 加密后保存；
-- 加密密钥由 `SECRET_KEY` 派生；更换 `SECRET_KEY` 会导致旧参数无法解密；
+- `password` 类型只是输入时隐藏；**所有类型**都会在服务端加密后保存；
+- 当前使用 AES-256-GCM v2，密钥由 `SECRET_KEY` 经 HKDF-SHA256 派生，AAD 绑定用户、
+  模块与账号序号；旧 Fernet 密文会在读取时透明升级；
+- 敏感参数在 API 中默认返回 `abcd****wxyz` 掩码；保存掩码或空值会保留原密文，
+  只有显式点击「显示敏感值」并通过当前密码校验才返回明文；
 - 多账号模式下，每个账号的 `params` 整体作为一个加密 JSON 数组保存；
-- 网页端详情接口会返回解密后的参数，因此 `/api/modules/*` 必须保持登录鉴权。
+- 网页端详情接口会返回解密后（或掩码后）的参数，因此 `/api/modules/*` 必须保持登录鉴权。
 
 ---
 
@@ -585,8 +662,9 @@ HTTP 客户端；同步阻塞代码应自行设置网络超时。
 | `GET` | `/api/auth/me` | 当前用户 |
 | `PUT` | `/api/auth/username` | 修改用户名（需当前密码） |
 | `POST` | `/api/auth/change-password` | 修改密码 |
-| `GET` | `/api/modules` | 模块列表（含本次执行时间） |
-| `GET` | `/api/modules/{id}` | 模块详情、参数与账号 |
+| `GET` | `/api/modules` | 模块列表；含 `directory_name` / `legacy_key` / `physical_directory` / `migration_status` |
+| `GET` | `/api/modules/{id}` | 模块详情、参数与账号（敏感值默认掩码） |
+| `GET` | `/api/modules/icon` | 模块图标（公开，按 `directory_name` 读取） |
 | `PUT` | `/api/modules/{id}` | 保存账号 / 参数 / 时间窗 / 周期 / 推送开关 |
 | `PATCH` | `/api/modules/{id}/enabled` | 启用 / 禁用 |
 | `POST` | `/api/modules/{id}/schedule/regenerate` | 手动重新生成本期随机时间 |
@@ -600,10 +678,13 @@ HTTP 客户端；同步阻塞代码应自行设置网络超时。
 | `GET` | `/api/logs` | 执行记录分页 |
 | `GET` | `/api/logs/{id}` | 执行详情 |
 | `GET` | `/api/logs/{id}/stream` | SSE 实时日志 |
+| `GET` | `/api/system/metrics` | 诊断指标：环形日志、SSE、限流器、连接池与锁竞争（需登录） |
+| `GET` | `/metrics` | Prometheus 文本指标（公开，DB 日志限流器压力） |
 | `GET` | `/api/health` | 健康检查（公开） |
 | `GET` | `/api/meta` | 系统元信息（需登录） |
 
-除 `/api/health` 与 `/api/auth/login` 外，其他 API 均要求 JWT。
+除 `/api/health`、`/api/auth/login`、`/api/modules/icon`、`/metrics` 外，其他 API 均要求
+Cookie 会话登录；写请求还需携带 `X-CSRF-Token`。不再使用 JWT/Bearer。
 
 ---
 
@@ -613,7 +694,9 @@ HTTP 客户端；同步阻塞代码应自行设置网络超时。
 
 ```bash
 cd daily-check-in-platform
-python -m pytest backend/tests -q
+python -m pytest backend/tests -q                 # 默认快速测试：221 passed
+python -m pytest backend/tests -m property -q      # PBT 契约测试：5 passed
+python -m pytest backend/tests/benchmark -m benchmark --benchmark-only  # 3 passed
 ```
 
 测试覆盖：
@@ -626,7 +709,10 @@ python -m pytest backend/tests -q
 - 随机时间 APScheduler 一次性任务与兜底任务；
 - 推送渠道校验、模板渲染、签名；
 - 完整 API 流程（登录、幂等用户名、随机调度、多账号串行、部分失败、推送配置）；
-- 进阶模板的模拟登录与配置校验。
+- 进阶模板的模拟登录与配置校验；
+- 模块物理目录映射、`legacy_key` 冲突与扫描/上传边界；
+- 图标路径沙箱、ICO/PNG/SVG 校验与降级；
+- 限流器/连接池/关闭状态机的 Property-Based Testing 与性能基准。
 
 ### 13.2 API 验证
 
@@ -666,9 +752,11 @@ python3 scripts/verify_api.py
 
 ---
 
-## 11. Iteration 6：敏感参数、推送返回与统一环形日志
+## Appendix A：Iteration 6 补充 — 敏感参数与统一环形日志
 
-### 11.1 `sensitive` 参数标记
+> 以下内容是 1.0.x 已有能力的补充说明；`sensitive` 字段已并入第 4 节参数定义。
+
+### A.1 `sensitive` 参数标记
 
 `config.json` 的参数项可以显式声明：
 
@@ -696,7 +784,7 @@ python3 scripts/verify_api.py
 - 只有显式点击「显示敏感值」并通过当前密码校验时才返回明文；
 - 不得在 `print`、`logging`、异常消息或返回值中输出完整明文。
 
-### 11.2 模块返回值与推送数据
+### A.2 模块返回值与推送数据
 
 ```python
 async def run(params: dict) -> dict:
@@ -714,7 +802,7 @@ async def run(params: dict) -> dict:
 - 平台负责独立推送、统一批次、重试、脱敏和审计，模块**不得**自行发送推送；
 - 多账号模式下平台逐个账号调用 `run`，模块只处理单个账号。
 
-### 11.3 统一环形日志写入规范
+### A.3 统一环形日志写入规范
 
 模块**禁止**自行创建日志文件、写 SQLite 日志表或使用 `logging.FileHandler`。所有输出必须通过：
 
