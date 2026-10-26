@@ -1,14 +1,41 @@
+# Git 相关
 .git
-.venv
-**/__pycache__
-**/*.py[cod]
-**/.pytest_cache
-**/node_modules
-backend/tests
-tests
-data
-logs
-*.db
-.env
-docs
+.gitignore
+
+# GitHub Actions / CI 配置
+.github
+.vscode
+.idea
+
+# 文档和说明
+README.md
+LICENSE
+docs/
 *.md
+
+# 测试相关
+tests/
+test/
+__tests__/
+*.test.*
+*.spec.*
+coverage/
+
+# 依赖缓存 / 构建产物（如果不需要进入镜像）
+node_modules/
+.cache/
+dist/
+build/
+*.log
+
+# Docker 自身配置（避免递归）
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# 其他需要排除的特定文件夹/文件
+your-excluded-folder/
+secret-config.json
+.env.local
+modules/
+pyproject.toml
