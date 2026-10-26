@@ -1,0 +1,99 @@
+{
+  "machine_info": {
+    "node": "Mac-mini.local",
+    "processor": "arm",
+    "machine": "arm64",
+    "python_compiler": "Clang 20.1.4 ",
+    "python_implementation": "CPython",
+    "python_implementation_version": "3.12.11",
+    "python_version": "3.12.11",
+    "python_build": [
+      "main",
+      "Aug 18 2025 19:02:39"
+    ],
+    "release": "24.6.0",
+    "system": "Darwin",
+    "cpu": {
+      "python_version": "3.12.11.final.0 (64 bit)",
+      "cpuinfo_version": [
+        10,
+        1,
+        1
+      ],
+      "cpuinfo_version_string": "10.1.1",
+      "arch": "ARM_8",
+      "bits": 64,
+      "count": 10,
+      "arch_string_raw": "arm64",
+      "brand_raw": "Apple M4"
+    }
+  },
+  "commit_info": {
+    "id": "24a2f5ca42e0b089cf2709297c8ff2c58511e546",
+    "time": "2026-10-21T21:23:15+08:00",
+    "author_time": "2026-10-21T21:23:15+08:00",
+    "dirty": true,
+    "project": "Daily-sign-in-platform",
+    "branch": "main"
+  },
+  "datetime": "2026-10-25T08:16:34.735118+00:00",
+  "benchmarks": [
+    {
+      "name": "test_bench_db_log_rate_limiter_emit",
+      "fullname": "backend/tests/benchmark/test_hot_paths_benchmark.py::test_bench_db_log_rate_limiter_emit",
+      "stats": {
+        "min": 1.334119588136673e-06,
+        "max": 0.0006060421001166105,
+        "mean": 4.4131984502184875e-06,
+        "stddev": 5.474180531425385e-06,
+        "rounds": 104802,
+        "median": 4.166038706898689e-06,
+        "iqr": 5.417969077825546e-07,
+        "q1": 3.875000402331352e-06,
+        "q3": 4.416797310113907e-06,
+        "ops": 226593.0280000194,
+        "iterations": 1,
+        "outliers": "",
+        "outlier_indices": []
+      }
+    },
+    {
+      "name": "test_bench_db_log_rate_limiter_suppress",
+      "fullname": "backend/tests/benchmark/test_hot_paths_benchmark.py::test_bench_db_log_rate_limiter_suppress",
+      "stats": {
+        "min": 7.918570190668106e-07,
+        "max": 0.0004771668463945389,
+        "mean": 1.253978167015891e-06,
+        "stddev": 2.437581985423129e-06,
+        "rounds": 198337,
+        "median": 1.2079253792762756e-06,
+        "iqr": 2.919696271419525e-07,
+        "q1": 1.0409858077764511e-06,
+        "q3": 1.3329554349184036e-06,
+        "ops": 797462.0502203109,
+        "iterations": 1,
+        "outliers": "",
+        "outlier_indices": []
+      }
+    },
+    {
+      "name": "test_bench_pool_metrics_snapshot",
+      "fullname": "backend/tests/benchmark/test_hot_paths_benchmark.py::test_bench_pool_metrics_snapshot",
+      "stats": {
+        "min": 8.749775588512421e-07,
+        "max": 0.00010537495836615562,
+        "mean": 1.1303513750027032e-06,
+        "stddev": 1.079062957631441e-06,
+        "rounds": 86648,
+        "median": 1.0831281542778015e-06,
+        "iqr": 1.6693957149982452e-07,
+        "q1": 1.00000761449337e-06,
+        "q3": 1.1669471859931946e-06,
+        "ops": 884680.6595848203,
+        "iterations": 1,
+        "outliers": "",
+        "outlier_indices": []
+      }
+    }
+  ]
+}
