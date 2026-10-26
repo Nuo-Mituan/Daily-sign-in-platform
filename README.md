@@ -2,7 +2,8 @@
 
 > ## v1.0.5 Release
 >
-> 本次 Minor 版本新增模块图标系统：支持 Emoji、本地 ICO、Base64 Data URI 与 HTTPS URL；
+> 本次 v1.0.5 版本包含统一环形日志、AES-256-GCM v2 安全基础、推送驱动与独立/统一推送、
+> 开发者模式，以及模块图标系统（Emoji / 本地 ICO / Base64 / HTTPS URL）。
 > 本地 ICO 经 RGBA PNG 转换保留 Alpha 透明通道，并提供路径沙箱、Magic Bytes、大小/尺寸限制与统一降级。
 >
 > - 发布与变更管制：[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md)
@@ -19,11 +20,11 @@
 > 定位类似青龙面板的签到任务管理，但更专注于「模块化 + 账号管理 + 随机调度 + 统一推送」。
 > 技术栈：**FastAPI + APScheduler + SQLite + Vue 3 + Element Plus**。
 >
-> 第三次迭代（用户设置、随机时间、多账号、统一推送）的详细变更与文件清单见
-> [docs/ITERATION3_CHANGES.md](docs/ITERATION3_CHANGES.md)。
-> 第四次迭代（周期子选项、未认证页面隐私）见
-> [docs/ITERATION4_CHANGES.md](docs/ITERATION4_CHANGES.md)。
-> 第六轮（安全基础、环形日志、推送重构）见
+> 版本历史：v1.0.3（用户设置、随机时间、多账号、统一推送）见
+> [docs/ITERATION3_CHANGES.md](docs/ITERATION3_CHANGES.md)；
+> v1.0.4（周期子选项、未认证页面隐私）见
+> [docs/ITERATION4_CHANGES.md](docs/ITERATION4_CHANGES.md)；
+> v1.0.5（安全基础、环形日志、推送重构、开发者模式、模块图标）见
 > [docs/ITERATION6_CHANGES.md](docs/ITERATION6_CHANGES.md)。
 
 <p align="center">
@@ -60,7 +61,8 @@
 ## 核心特性
 
 - **多源模块图标**：支持 Emoji、本地 ICO、Base64 Data URI、HTTPS URL；本地 ICO 自动转 RGBA PNG 保留透明通道，非法或加载失败统一降级为 ⚠️。
-- **模块热插拔**：上传 ZIP 或把模块目录放进 `modules/` 后点击扫描，无需重启服务。
+- **模块热插拔**：上传 ZIP 或把模块目录放进 `modules/` 后点击扫描，无需重启服务；
+  支持 `directory_name` 物理目录名与 `legacy_key` 目录迁移，API key 与磁盘目录解耦。
 - **自动渲染参数表单**：模块通过 `config.json` 声明 `text / textarea / password / select / switch / number` 参数。
 - **参数加密存储**：AES-256-GCM v2（HKDF-SHA256 派生密钥、AAD 绑定模块/账号），旧 Fernet 密文透明升级。
 - **随机时间调度**：为每个模块设置 `HH:mm` 时间窗与每日 / 每周 / 每月15日 / 每月 / 每年周期；
@@ -68,16 +70,22 @@
   整点补偿，时间窗中点兜底并推送告警。
 - **多账号串行**：账号数组支持添加、删除、折叠、备注与拖拽排序；平台逐账号执行，
   默认随机等待 2–5 分钟；日志中的账号标识自动脱敏，部分失败会汇总为整体失败。
-- **统一推送**：Bark / Server酱 / PushPlus / 钉钉 / 飞书，全局渠道加密保存；
-  每个模块有独立推送开关，支持自定义标题与正文模板变量。
+- **统一推送与推送驱动**：Bark / Server酱 / PushPlus / 钉钉 / 飞书内置渠道；支持独立推送、
+  统一批次汇总、推送记录/批次查询，以及可信自定义驱动上传、热加载、回滚与最多 5 版本。
 - **独立开关**：每个模块独立启用 / 禁用，开关与随机调度即时同步。
 - **手动执行 / 手动重生成**：任意模块可立即执行一次；启用模块可重新生成本期随机时间。
-- **实时日志**：执行输出通过 SSE 实时推送到网页，支持查看历史、复制、下载。
+- **实时日志与环形日志**：执行输出通过 SSE 实时推送，支持 `last_seq` 断点续读；
+  SQLite 环形日志按系统 / 模块 / 推送分域配额，支持保留天数、条数/字节上限、系统日志查看与日志设置。
 - **仪表盘**：模块总数、启用数、今日执行、成功 / 失败、运行中模块、下一次随机计划与最近记录。
 - **完整执行历史**：按模块、状态、触发方式筛选，分页查询。
 - **单管理员 + Cookie 会话**：首次部署自动创建管理员；HttpOnly/SameSite=Strict Cookie、服务端会话白名单与 CSRF 防护
   与修改密码，登录失败统一提示，具备基础防枚举与敏感操作限流。
-- **Docker 一键部署**：多阶段构建，前端与后端打包进同一个轻量镜像，数据通过 volume 持久化。
+- **开发者模式与手动测试**：按用户开启，服务端强制校验；测试执行使用独立触发类型，
+  跳过统一推送池并强制走独立推送。
+- **系统运维**：系统日志、日志保留设置、推送历史/批次、诊断指标 `/api/system/metrics` 与
+  Prometheus `/metrics`；支持运行中查看调度器状态。
+- **Docker 一键部署**：多阶段构建，前端与后端打包进同一个轻量镜像；入口脚本按 `PUID`/`PGID`
+  修复挂载目录权限后降权运行，`data/`、`logs/` 使用 700 权限，数据通过 volume 持久化。
 - **内置示例模块**：两个不访问真实接口的演示模块，覆盖所有参数类型与相对导入。
 - **进阶模块模板**：多账号标准入口，演示 Cookie 过期检测、自动刷新、退避重试与平台推送接入。
 - **部署验证脚本**：一条命令在隔离环境中验证 Docker 构建、启动、随机调度、多账号、推送配置与核心 API。
@@ -91,6 +99,7 @@
 - Docker Engine 20.10+
 - Docker Compose v2（`docker compose` 命令）
 - 建议 1 GB 以上可用内存
+- 默认 `docker-compose.yml` 使用 `Dockerfile.dev`（包含后端测试）；生产发布可使用 `Dockerfile` 构建精简镜像。两者均通过 `PUID`/`PGID` 降权运行。
 
 ### 1. 准备目录
 
@@ -99,6 +108,7 @@ cd daily-checkin-platform
 
 mkdir -p data logs modules
 cp .env.example .env        # 可选：修改端口；ADMIN_PASS 留空则自动生成随机密码
+# PUID/PGID 默认 10001；入口脚本会 chown data/logs/modules 后降权
 ```
 
 ### 2. 构建并启动
@@ -211,7 +221,7 @@ daily-checkin-platform/
 │   │   ├── main.py                 # FastAPI 入口、lifespan、静态文件托管
 │   │   ├── config.py               # 环境变量 / 路径 / 密钥初始化
 │   │   ├── database.py             # async SQLAlchemy + SQLite
-│   │   ├── models.py               # User / Module / ModuleSchedule / PushConfig / ExecutionLog
+│   │   ├── models.py               # User / Module / Schedule / RingLog / Push* / ExecutionLog
 │   │   ├── schemas.py              # Pydantic 请求与响应
 │   │   ├── security.py             # PBKDF2 密码哈希
 │   │   ├── crypto.py               # 参数与推送配置加密（支持账号数组）
@@ -219,29 +229,39 @@ daily-checkin-platform/
 │   │   ├── scheduling.py           # 周期、时间窗、随机时间计算
 │   │   ├── migrations.py           # SQLite 前向迁移（旧 Cron → 时间窗）
 │   │   ├── routers/
-│   │   │   ├── auth.py             # 登录 / 当前用户 / 用户名 / 密码
-│   │   │   ├── modules.py          # 模块 CRUD、账号、随机调度、执行
-│   │   │   ├── push.py             # 全局推送配置与测试
-│   │   │   ├── logs.py             # 历史记录 + SSE 实时日志
+│   │   │   ├── auth.py             # 登录 / 会话 / 用户名 / 密码
+│   │   │   ├── modules.py          # 模块 CRUD、账号、调度、执行、敏感值
+│   │   │   ├── push.py             # 推送配置、驱动、记录与批次
+│   │   │   ├── logs.py             # 执行记录 + SSE 断点续读
 │   │   │   ├── dashboard.py        # 仪表盘统计
-│   │   │   └── system.py           # /api/health、/api/meta
+│   │   │   ├── metrics.py          # 公开 Prometheus /metrics
+│   │   │   └── system.py           # health / meta / system logs / settings / metrics
+│   │   ├── push_drivers/          # 内置与自定义推送驱动
+│   │   │   ├── builtin_specs.py
+│   │   │   ├── registry.py
+│   │   │   └── validation.py
 │   │   └── services/
-│   │       ├── scheduler.py        # 动态 plan / exec / fallback 一次性任务
+│   │       ├── scheduler.py        # plan / exec / fallback 一次性任务
 │   │       ├── schedules.py        # 本期计划生成、兜底、状态机
 │   │       ├── execution.py        # 多账号串行、间隔、汇总、推送
-│   │       ├── push.py             # Bark / Server酱 / PushPlus / 钉钉 / 飞书
+│   │       ├── push.py             # 内置推送渠道
+│   │       ├── push_pool.py        # 统一批次、flush、补发
+│   │       ├── push_outbox.py      # 推送 outbox 与重试
+│   │       ├── ring_log.py         # 统一环形日志、配额与裁剪
 │   │       ├── auth_guard.py       # 敏感操作锁与失败限流
-│   │       ├── hub.py              # 内存日志发布 / 订阅
+│   │       ├── auth_sessions.py    # 服务端会话白名单
+│   │       ├── hub.py              # 内存日志发布 / SSE 订阅
 │   │       ├── capture.py          # stdout / stderr / logging 捕获
 │   │       ├── module_upload.py    # ZIP 安全解压、安装、删除
+│   │       ├── module_icon.py      # 图标校验、ICO→PNG
 │   │       ├── maintenance.py      # 遗留任务修复、日志清理
-│   │       ├── file_logs.py        # 文件日志镜像
+│   │       ├── preferences.py      # 开发者模式偏好
 │   │       └── bootstrap.py        # 首次管理员与模块同步
 │   ├── requirements.txt
 │   └── requirements-dev.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── views/                  # Login / Dashboard / Modules / Detail / Logs / Settings / Guide
+│   │   ├── views/                  # Login / Dashboard / Modules / Logs / PushCenter / SystemLogs / Settings / Guide
 │   │   ├── components/             # 参数表单、账号编辑器、随机时间、日志抽屉
 │   │   ├── layouts/AppLayout.vue   # 侧栏 + 顶栏 + 用户菜单
 │   │   ├── router/                 # 路由与登录守卫
@@ -253,6 +273,8 @@ daily-checkin-platform/
 │   ├── pnpm-lock.yaml
 │   ├── vite.config.js
 │   └── pnpm-workspace.yaml
+├── tools/
+│   └── pbt_bootstrap.py            # PBT 契约脚手架生成器
 ├── modules/
 │   ├── demo_checkin/               # 示例 1：覆盖全部参数类型
 │   │   ├── config.json
@@ -278,8 +300,10 @@ daily-checkin-platform/
 │   ├── playbooks/                  # 状态机重构 Playbook 与团队赋能材料
 │   ├── runbooks/                   # 金丝雀发布与回滚检查清单
 │   └── screenshots/
-├── backend/tests/                  # 单元测试 + API 冒烟测试
-├── Dockerfile
+├── backend/tests/                  # 默认测试 / property PBT / benchmark
+├── Dockerfile                      # 生产镜像（仅运行时依赖）
+├── Dockerfile.dev                  # Compose 默认镜像（含测试依赖）
+├── docker-entrypoint.py            # PUID/PGID 目录修复与降权入口
 ├── docker-compose.yml
 ├── .env.example
 ├── .dockerignore
@@ -407,7 +431,39 @@ python3 scripts/check_icon_alpha.py --base64 'data:image/x-icon;base64,AAABAAEAE
 - 全局记录可按模块、状态、触发方式筛选。
 - 可开启每 10 秒自动刷新。
 - 点击任意记录打开日志抽屉；运行中的任务会实时显示输出。
-- 执行输出同时保存在数据库与宿主机 `logs/` 目录。
+- 新执行正文写入统一环形日志，旧 `execution_logs.output` 仅保留只读回退。
+- 支持 SSE `last_seq` 断点续读，服务重启后仍按单调 `seq` 恢复。
+
+### 推送中心
+
+- 「推送记录」查看独立推送、统一汇总与 flush 后补发的发送历史。
+- 「统一批次」查看周期批次摘要、状态与超时兜底结果。
+- 「驱动管理」查看内置/自定义驱动，支持上传 `.py` / `.zip`、热加载、回滚与删除。
+- 自定义驱动与主进程同权限，不是沙箱；仅允许可信管理员上传。
+- 统一推送主触发在每天 01:00 计算当天最晚签到时间 +1 分钟，超时兜底默认关闭；
+  详见 [统一推送](docs/UNIFIED_PUSH.md) 与 [推送驱动](docs/PUSH_DRIVERS.md)。
+
+### 系统日志与日志设置
+
+- 「系统日志」只读查看 `system` / `module` / `push` 三个域的环形日志，按 `seq` 倒序分页，
+  可按级别筛选，文本已脱敏。
+- 「用户设置 → 日志设置」可查看当前保留天数、总条数与总字节，并在线修改保留天数；
+  修改后立即裁剪。
+- 环形日志同时受保留天数与条数/字节双约束；系统、每模块、推送域分别有独立配额。
+
+### 开发者模式
+
+- 「用户设置」开启开发者模式后，模块详情页出现「测试执行」。
+- 服务端强制校验 `users.developer_mode_enabled`，前端隐藏按钮不能替代权限检查。
+- 测试执行使用 `trigger_type=test`，日志带 `[TEST]`，跳过统一推送池并强制独立推送。
+- 关闭开发者模式会失效现有会话；见 [开发者模式](docs/DEVELOPER_MODE.md)。
+
+### 诊断指标
+
+- `GET /api/system/metrics`（需登录）：环形日志、SSE、DB 日志限流器、连接池与锁竞争指标。
+- `GET /metrics`（公开）：Prometheus 文本格式，暴露 DB 日志限流器压力指标。
+- 告警规则与 Runbook 见 [告警规则](backend/observability/alerts/db_log_rate_limiter.yml) 和
+  [金丝雀检查清单](docs/runbooks/canary-validation-db-log-rate-limiter.md)。
 
 ### 仪表盘
 
@@ -567,25 +623,50 @@ async def run(params: dict[str, Any]) -> dict[str, Any]:
 | `APP_BIND` | `0.0.0.0` | Compose 映射端口绑定的宿主地址。内网建议 `127.0.0.1` 或可信局域网 IP。 |
 | `APP_PORT` | `5000` | Compose 映射到宿主机的端口。 |
 | `TZ` | `Asia/Shanghai` | 容器系统时区（影响容器日志时间）。 |
-| `TIMEZONE` | `Asia/Shanghai` | 随机调度、时间窗与页面展示的业务时区。 |
+| `TIMEZONE` | `Asia/Shanghai` | 随机调度、时间窗、批次计划与页面展示的业务时区。 |
 | `ADMIN_USER` | `admin` | 首次创建的管理员用户名。 |
 | `ADMIN_PASS` | 留空自动生成 | 首次创建的管理员密码。留空：生成随机密码并强制首次改密；显式设置：使用指定密码且首次登录不强制改密。 |
 | `SECRET_KEY` | 自动生成 | Cookie 签名与 AES-256-GCM 参数加密密钥。留空时生成于 `data/.secret_key`。 |
 | `COOKIE_SECURE` | `false` | HTTPS 部署必须设为 `true`；内网 HTTP 保持 `false`。 |
+| `COOKIE_MAX_AGE_SECONDS` | `604800` | 会话 Cookie 最长 7 天。 |
+| `SESSION_RENEW_INTERVAL_SECONDS` | `300` | 会话滑动续期间隔（秒）。 |
 | `CSRF_ENABLED` | `true` | 写请求 CSRF Header 校验开关。 |
 | `MODULE_TIMEOUT` | `300` | 单个账号执行超时（秒）；多账号分别计时。 |
 | `ACCOUNT_INTERVAL_MIN_SECONDS` | `120` | 多账号串行时账号间随机等待下限（秒）。 |
 | `ACCOUNT_INTERVAL_MAX_SECONDS` | `300` | 多账号串行时账号间随机等待上限（秒）。 |
 | `SCHEDULE_MIN_LEAD_SECONDS` | `5` | 随机时间最少提前秒数，避免生成后立即触发。 |
-| `LOG_RETENTION_DAYS` | `30` | 执行记录与文件日志保留天数，`0` 表示不清理。 |
+| `LOG_RETENTION_DAYS` | `31` | 环形日志/执行记录保留天数，1–365；也可在网页日志设置修改。 |
 | `LOG_MAX_CHARS` | `512000` | 单次执行捕获的最大输出字符数。 |
 | `UPLOAD_MAX_MB` | `10` | ZIP 上传大小限制。 |
+| `RING_LOG_MAX_ROWS` / `RING_LOG_MAX_BYTES` | `200000` / `134217728` | 全局环形日志条数 / 字节上限。 |
+| `RING_SYSTEM_MAX_ROWS` / `RING_SYSTEM_MAX_BYTES` | `50000` / `33554432` | 系统日志域条数 / 字节上限。 |
+| `RING_MODULE_MAX_ROWS` / `RING_MODULE_MAX_BYTES` | `20000` / `16777216` | 每个模块独立条数 / 字节上限。 |
+| `RING_PUSH_MAX_ROWS` / `RING_PUSH_MAX_BYTES` | `50000` / `33554432` | 推送审计域条数 / 字节上限。 |
+| `RING_TRIM_BATCH_SIZE` | `1000` | 单批裁剪条数。 |
+| `RING_QUEUE_MAX` | `10000` | 环形日志写入队列上限。 |
+| `RING_BUSY_TIMEOUT_SECONDS` | `15` | SQLite 忙等待超时（秒）。 |
+| `RING_WRITE_RETRIES` | `6` | 环形日志写入重试次数。 |
+| `RING_TRIM_MAX_LOOPS` | `10000` | 单次裁剪最大循环次数。 |
+| `SSE_KEEPALIVE_SECONDS` | `15` | SSE 心跳间隔（秒）。 |
+| `SSE_QUEUE_MAX` | `2000` | 每个 SSE 连接的队列上限。 |
+| `PUSH_SKIP_NOTICE` | `true` | 统一摘要是否展示 skip 明细；计数始终保留。 |
+| `PUSH_AFTER_FLUSH_MODE` | `single` | flush 后手动执行的补发模式：`single` / `none`。 |
+| `PUSH_RETRY_ATTEMPTS` | `3` | 统一汇总最大尝试次数。 |
+| `PUSH_RETRY_BASE_SECONDS` | `1.0` | 指数退避基数。 |
+| `PUSH_HTTP_TIMEOUT_SECONDS` | `10` | 推送 HTTP 总超时（秒）。 |
+| `PUSH_CONNECT_TIMEOUT_SECONDS` | `5` | 推送连接超时（秒）。 |
+| `PUSH_REQUEST_RETRY_SECONDS` | `0.8` | 单次请求重试间隔（秒）。 |
+| `PUSH_RESPONSE_MAX_CHARS` | `4000` | 推送响应记录截断长度。 |
+| `PUSH_DRIVER_MAX_VERSIONS` | `5` | 每个自定义驱动保留的最大版本数。 |
+| `PUID` / `PGID` | `10001` | 容器入口修复挂载目录权限后降权使用的 UID/GID。 |
 | `DATA_DIR` | `./data` | 数据库与密钥目录；容器内为 `/app/data`。 |
 | `MODULES_DIR` | `./modules` | 模块目录；容器内为 `/app/modules`。 |
-| `LOGS_DIR` | `./logs` | 文件日志目录；容器内为 `/app/logs`。 |
+| `LOGS_DIR` | `./logs` | 文件日志/旧日志目录；容器内为 `/app/logs`。 |
 | `FRONTEND_DIR` | `./frontend/dist` | 前端构建产物目录；容器内为 `/app/static`。 |
 | `DATABASE_URL` | SQLite | 可选的自定义数据库 URL（需安装对应异步驱动）。 |
 | `CORS_ORIGINS` | 空 | 逗号分隔的额外允许来源，同源部署不需要配置。 |
+| `TRUST_PROXY_HEADERS` | `true` | 是否信任反向代理的转发头；直接暴露公网时应收紧。 |
+
 
 修改 `.env` 后执行 `docker compose up -d` 重建容器。注意：**修改 `ADMIN_USER` / `ADMIN_PASS`
 不会修改已存在账户的密码；`ADMIN_PASS` 仅在首次创建管理员时生效。
@@ -702,7 +783,10 @@ cd frontend && npm run build            # 生产构建验证
 - [ ] 为 `/api/auth/login` 配置登录限流
 - [ ] SSE 路径关闭代理缓冲（否则实时日志会被延迟）
 - [ ] 合理设置 `LOG_RETENTION_DAYS` 并监控磁盘
-- [ ] 只安装可信模块（模块代码以服务进程权限执行）
+- [ ] 只安装可信模块与自定义推送驱动（代码以服务进程权限执行，非沙箱）
+- [ ] 确认 `PUID` / `PGID` 与宿主机挂载目录权限匹配，`data/`、`logs/` 为 700
+- [ ] 若公网部署，限制 `/metrics` 抓取来源并关闭不必要的诊断权限
+- [ ] 为环形日志设置合理保留天数与条数/字节上限
 - [ ] 实际演练一次备份恢复
 
 安全文档还包含：
@@ -753,8 +837,9 @@ docker compose up -d
 
 - 平台使用 HttpOnly Cookie 会话与 CSRF Header 校验；密码使用 PBKDF2-HMAC-SHA256 加盐存储。
 - 模块参数使用 AES-256-GCM v2 加密，AAD 绑定用户、模块与账号；旧 Fernet 密文自动升级。
-- 所有管理接口均需要登录；公开访问的只有 `/api/health`、`/metrics`（Prometheus 文本指标）、
-  `/api/modules/icon`（模块图标，供 `<img>` 使用）、`/docs` 和 OpenAPI 描述。
+- 所有管理接口均需要登录；公开访问的只有 `/api/health`、`/api/auth/login`、
+  `/metrics`（Prometheus 文本指标）、`/api/modules/icon`（模块图标，供 `<img>` 使用）、
+  `/docs` 和 OpenAPI 描述。
   未登录访问 `/api/modules/*`（图标端点 `/api/modules/icon` 除外）、`/api/dashboard/*`、
   `/api/push/*`、`/api/logs/*`、`/api/system/*` 均返回 401；运维抓取连接池与限流器 JSON
   指标需使用认证后的 `/api/system/metrics`，或直接抓取公开的 `/metrics`。
@@ -857,18 +942,31 @@ docker compose up -d
 
 ### v1.0.5
 
-- 新增模块图标系统：Emoji、本地 ICO、Base64 Data URI、HTTPS URL。
-- 本地 ICO 使用 Pillow 转 RGBA PNG，完整保留 Alpha 透明通道。
-- 新增图标安全沙箱：路径遍历/绝对路径拦截、真实路径前缀校验、软链接逃逸阻断、ICO Magic Bytes、64KB/1024×1024 限制。
-- Base64 图标增加 MIME 白名单与前后端双重正则校验，失败统一降级为 ⚠️。
-- 新增 `ModuleIcon.vue`、图标 URL 安全构造函数、`scripts/check_icon_alpha.py` 诊断工具。
-- 数据库新增 `icon_source` / `icon_data` 字段，SQLite/PostgreSQL 启动迁移。
-- 新增模块配置物理模块目录名。
+- 安全基础：AES-256-GCM v2（HKDF-SHA256、AAD 绑定用户/模块/账号）、旧 Fernet 密文透明升级、敏感参数掩码与二次密码校验。
+- 认证升级：Cookie 会话替代 JWT，HttpOnly / SameSite=Strict / 可选 Secure、服务端会话白名单、CSRF Header。
+- 统一环形日志：`ring_logs` + 单调 `seq`、系统/模块/推送分域配额、保留天数 + 条数/字节双约束、SSE `last_seq` 断点续读。
+- 推送重构：内置 + 自定义驱动、驱动热加载/回滚/版本管理、独立推送与统一批次、推送记录/批次摘要、超时兜底。
+- 开发者模式：服务端强制校验，支持隔离的测试执行。
+- 系统日志、日志设置、运行时指标 `/api/system/metrics` 与 Prometheus `/metrics`。
+- Docker 非 root 入口：`PUID`/`PGID` 降权，`data/`/`logs/` 700，SQLite 600。
+- 模块图标系统：Emoji、本地 ICO、Base64、HTTPS URL；ICO 转 RGBA PNG，路径沙箱/尺寸/Magic Bytes 限制。
+- 模块物理目录名 `directory_name` 与 `legacy_key` 迁移；图标、执行与删除均按物理目录读取。
 - 当前测试矩阵：221 个默认测试、5 个 PBT 契约测试、3 个基准测试；前端生产构建通过。
 
-### v1.0.2
+### v1.0.4
 
-- 安全基础、环形日志与统一推送重构；详见历史发布说明。
+- 周期精简为 `daily` / `weekly` / `monthly_15` / `monthly` / `yearly` 五种，新增条件子选项。
+- 未认证登录页彻底移除模块名称、时间窗、账号数量等预览数据，新增前端隐私检查脚本。
+- 新增受保护的周期预览接口。
+- 详见 [docs/ITERATION4_CHANGES.md](docs/ITERATION4_CHANGES.md)。
+
+### v1.0.3
+
+- 用户设置：修改用户名/密码、登录安全与失败限流。
+- 随机时间调度：时间窗 + 周期、执行日 00:00 生成、整点补偿、时间窗中点兜底。
+- 多账号串行：账号数组、备注、拖拽排序、2–5 分钟随机间隔、账号级超时与脱敏。
+- 平台级统一推送与示例模块/进阶模板。
+- 详见 [docs/ITERATION3_CHANGES.md](docs/ITERATION3_CHANGES.md)。
 
 ## API 一览
 
@@ -877,32 +975,51 @@ FastAPI 自动生成的交互式文档：**`/docs`**
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `POST` | `/api/auth/login` | 登录并设置 Cookie 会话 |
-| `GET` | `/api/auth/me` | 当前用户 |
+| `GET` | `/api/auth/session` | 校验并滑动续期当前会话 |
+| `GET` | `/api/auth/me` | 当前用户（含开发者模式状态） |
+| `POST` | `/api/auth/logout` | 退出当前会话 |
+| `POST` | `/api/auth/logout-all` | 注销全部会话 |
 | `PUT` | `/api/auth/username` | 修改用户名（验证当前密码） |
 | `POST` | `/api/auth/change-password` | 修改密码 |
-| `GET` | `/api/push/config` | 读取全局推送配置 |
+| `GET` | `/api/push/config` | 读取全局推送配置（凭据掩码） |
 | `PUT` | `/api/push/config` | 保存全局推送配置 |
+| `POST` | `/api/push/reveal` | 二次密码校验后显示推送凭据 |
+| `GET` / `PUT` | `/api/push/unified-settings` | 读取 / 保存统一推送超时兜底设置 |
 | `POST` | `/api/push/test` | 发送推送测试消息 |
+| `GET` | `/api/push/drivers` | 内置 / 自定义推送驱动列表 |
+| `POST` | `/api/push/drivers/upload` | 上传并热加载自定义驱动 |
+| `POST` | `/api/push/drivers/{key}/rollback` | 回滚自定义驱动版本 |
+| `DELETE` | `/api/push/drivers/{key}` | 删除自定义驱动 |
+| `GET` | `/api/push/records` | 推送发送历史 |
+| `GET` | `/api/push/batches` | 统一推送批次摘要 |
 | `GET` | `/api/dashboard` | 仪表盘统计与最近执行 |
-| `GET` | `/api/modules` | 模块列表 |
-| `GET` | `/api/modules/{id}` | 模块详情与解密参数 |
+| `GET` | `/api/modules` | 模块列表；含目录映射、调度与推送状态 |
+| `GET` | `/api/modules/{id}` | 模块详情、参数与账号（敏感值默认掩码） |
+| `POST` | `/api/modules/{id}/reveal-sensitive` | 二次密码校验后显示模块敏感参数 |
 | `PUT` | `/api/modules/{id}` | 保存账号 / 参数 / 时间窗 / 周期 / 子选项 / 推送开关 |
-| `PATCH` | `/api/modules/{id}/enabled` | 独立开关 |
-| `POST` | `/api/modules/schedule/preview` | 预览周期子选项与下一次执行日期（需登录） |
+| `PATCH` | `/api/modules/{id}/enabled` | 启用 / 禁用模块 |
+| `POST` | `/api/modules/schedule/preview` | 预览周期子选项与下一次执行日期 |
 | `POST` | `/api/modules/{id}/schedule/regenerate` | 手动重新生成本期随机时间 |
 | `POST` | `/api/modules/{id}/run` | 立即执行 |
+| `POST` | `/api/modules/{id}/test` | 开发者模式下执行一次测试 |
 | `DELETE` | `/api/modules/{id}` | 删除模块与目录 |
 | `POST` | `/api/modules/scan` | 扫描模块目录 |
 | `POST` | `/api/modules/upload` | 上传 ZIP 模块 |
+| `GET` | `/api/modules/icon` | 模块图标（公开；按 `directory_name` 读取） |
 | `GET` | `/api/logs` | 分页查询执行记录 |
 | `GET` | `/api/logs/{id}` | 执行详情与输出 |
-| `GET` | `/api/logs/{id}/stream` | SSE 实时日志流 |
+| `GET` | `/api/logs/{id}/stream` | SSE 实时日志流（`last_seq` 断点续读） |
 | `DELETE` | `/api/logs` | 清空执行记录（可按模块） |
-| `GET` | `/api/modules/icon` | 模块图标（公开；按 `directory_name` 读取） |
+| `GET` | `/api/system/logs` | 只读系统 / 模块 / 推送环形日志 |
 | `GET` | `/api/system/metrics` | 运行时指标：环形日志、SSE、限流器、连接池与锁竞争（需登录） |
-| `GET` | `/metrics` | Prometheus 文本指标（公开；DB 日志限流器压力指标） |
+| `GET` / `PUT` | `/api/settings/logs` | 读取 / 修改日志保留天数并立即裁剪 |
+| `GET` / `PUT` | `/api/settings/developer` | 读取 / 修改开发者模式 |
+| `GET` | `/metrics` | Prometheus 文本指标（公开；DB 日志限流器压力） |
 | `GET` | `/api/health` | 健康检查（无需登录） |
-| `GET` | `/api/meta` | 系统元信息（周期选项、账号间隔等） |
+| `GET` | `/api/meta` | 系统元信息（版本、周期选项、账号间隔、模块目录等） |
+
+除 `/api/health`、`/api/auth/login`、`/api/modules/icon`、`/metrics` 外，其他 API 均要求
+Cookie 会话登录；写请求还需携带 `X-CSRF-Token`。不再使用 JWT/Bearer。
 
 ---
 
