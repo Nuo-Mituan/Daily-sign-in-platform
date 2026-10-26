@@ -1,0 +1,22 @@
+groups:
+  - name: db_log_rate_limiter_pressure
+    rules:
+      - alert: DbLogSuppressionStorm
+        expr: rate(db_log_suppressed_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+          component: backend-core
+        annotations:
+          summary: "DB log rate limiter is suppressing >100 events/sec"
+          description: "High suppression rate indicates potential log storm or misconfigured rate limits. Check active_event_types and overflow_evictions."
+
+      - alert: DbLogCapacityOverflow
+        expr: increase(db_log_overflow_evictions_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: backend-core
+        annotations:
+          summary: "DB log rate limiter has evicted event types due to capacity overflow"
+          description: "MAX_EVENT_TYPES (256) is insufficient for current traffic diversity. Consider increasing limit or investigating event type cardinality explosion."
