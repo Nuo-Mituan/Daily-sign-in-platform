@@ -1,0 +1,46 @@
+{
+  "name": "摸鱼能量签到（多账号）",
+  "description": "多账号示例模块：为每个账号独立执行一次模拟签到。演示 textarea / number / switch 参数、账号标签脱敏与相对导入；所有请求均为本地模拟。",
+  "author": "Daily Check-in Platform",
+  "version": "1.2.0",
+  "icon": "🐟",
+  "default_start_time": "08:00",
+  "default_end_time": "10:00",
+  "default_repeat_cycle": "daily",
+  "multi_account": true,
+  "params": [
+    {
+      "key": "cookie",
+      "label": "Cookie",
+      "type": "textarea",
+      "required": true,
+      "rows": 4,
+      "sensitive": true,
+      "account_label": true,
+      "placeholder": "SESSDATA=xxxxxx; bili_jct=xxxxxx;",
+      "help": "作为账号标识时会自动脱敏；演示模块不会发送到任何服务器。"
+    },
+    {
+      "key": "target_level",
+      "label": "目标等级",
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "step": 1
+    },
+    {
+      "key": "verbose",
+      "label": "详细日志",
+      "type": "switch",
+      "default": true
+    },
+    {
+      "key": "simulate_failure",
+      "label": "模拟失败",
+      "type": "switch",
+      "default": false,
+      "help": "仅用于演示多账号部分失败汇总，不会访问任何真实接口。"
+    }
+  ]
+}
