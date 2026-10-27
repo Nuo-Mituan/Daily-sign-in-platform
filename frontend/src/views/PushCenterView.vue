@@ -249,12 +249,12 @@ async function loadTimeoutSettings() {
   timeoutTime.value = data.timeout_time || '23:30'
 }
 
-async function saveTimeoutSettings() {
+async function saveTimeoutSettings(payload = {}) {
   savingTimeout.value = true
   try {
     const data = await pushApi.updateUnifiedSettings({
-      timeout_enabled: Boolean(timeoutEnabled.value),
-      timeout_time: timeoutTime.value || '23:30',
+      timeout_enabled: Boolean(payload.enabled ?? timeoutEnabled.value),
+      timeout_time: payload.time || timeoutTime.value || '23:30',
     })
     timeoutEnabled.value = Boolean(data.timeout_enabled)
     timeoutTime.value = data.timeout_time

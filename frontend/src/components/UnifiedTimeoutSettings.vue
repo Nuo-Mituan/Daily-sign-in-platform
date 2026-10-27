@@ -53,6 +53,13 @@ const timeModel = computed({
   get: () => props.time,
   set: (value) => emit('update:time', value || '23:30'),
 })
+
+function save() {
+  emit('save', {
+    enabled: enabledModel.value,
+    time: timeModel.value,
+  })
+}
 </script>
 
 <style scoped>

@@ -11,6 +11,7 @@ export const authApi = {
 
 export const modulesApi = {
   list: () => http.get('/modules'),
+  iconUrl: (key, path = 'icon.ico') => `${apiBase()}/modules/icon?key=${encodeURIComponent(key)}&path=${encodeURIComponent(path)}`,
   get: (id) => http.get(`/modules/${id}`),
   update: (id, payload) => http.put(`/modules/${id}`, payload),
   toggle: (id, enabled) => http.patch(`/modules/${id}/enabled`, { enabled }),
