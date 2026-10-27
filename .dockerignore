@@ -20,6 +20,7 @@ __tests__/
 *.test.*
 *.spec.*
 coverage/
+backend/tests
 
 # 依赖缓存 / 构建产物（如果不需要进入镜像）
 node_modules/
@@ -38,4 +39,7 @@ your-excluded-folder/
 secret-config.json
 .env.local
 modules/
+backend/observability
 pyproject.toml
+pytest.ini
+.cursorruless.md
