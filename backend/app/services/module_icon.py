@@ -9,6 +9,15 @@ from PIL import Image, UnidentifiedImageError
 
 MAX_ICON_BYTES = 64 * 1024
 MAX_ICON_PIXELS = 1024 * 1024
+ALLOWED_ICON_MIME_TYPES = frozenset({
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+})
+ALLOWED_ICON_SUFFIXES = frozenset({
+    ".ico", ".png", ".jpg", ".jpeg", ".webp", ".svg",
+})
 
 
 class ModuleIconError(Exception):
@@ -48,12 +57,19 @@ def _decode_pillow(data: bytes, fmt: str) -> bytes:
             output = BytesIO()
             rgba.save(output, format="PNG", optimize=True)
             return output.getvalue()
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except (
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        Image.DecompressionBombError,
+    ) as exc:
         raise ModuleIconInvalid() from exc
 
 
 def load_icon(candidate: Path) -> tuple[bytes, str, int]:
     """Return (bytes, media_type, mtime_ns); all filesystem work happens here."""
+    if candidate.suffix.lower() not in ALLOWED_ICON_SUFFIXES:
+        raise ModuleIconInvalid()
     try:
         stat = candidate.stat()
         if stat.st_size > MAX_ICON_BYTES:
@@ -81,6 +97,14 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         return _decode_pillow(data, "ICO"), "image/png", stat.st_mtime_ns
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return _decode_pillow(data, "PNG"), "image/png", stat.st_mtime_ns
+    if data.startswith(b"\xff\xd8\xff"):
+        return _decode_pillow(data, "JPEG"), "image/png", stat.st_mtime_ns
+    if (
+        len(data) >= 12
+        and data[:4] == b"RIFF"
+        and data[8:12] == b"WEBP"
+    ):
+        return _decode_pillow(data, "WEBP"), "image/png", stat.st_mtime_ns
 
     try:
         text = data.decode("utf-8", errors="strict")
