@@ -160,7 +160,7 @@ modules/
 | `description` | string | 否 | `""` | 模块描述，最长 2000 字符。 |
 | `author` | string | 否 | `""` | 作者 / 维护者。 |
 | `version` | string | 否 | `"1.0.0"` | 模块版本。 |
-| `icon` | string | 否 | `"🧩"` | Emoji、本地 ICO、Base64 Data URI 或 HTTPS URL。 |
+| `icon` | string | 否 | `"🧩"` | Emoji、本地 PNG/JPG/WebP/ICO、Base64 Data URI 或 HTTPS URL。 |
 | `directory_name` | string | 否 | 回退 `key` | 物理模块目录名；`[A-Za-z0-9][A-Za-z0-9_-]{0,79}`。 |
 | `legacy_key` | string | 否 | — | 目录改名时显式保留的旧 API key。 |
 | `icon_source` | string | 否 | `"url"` | **旧兼容字段**：`url` / `base64` / `local`。 |
@@ -214,7 +214,7 @@ modules/
 | 类型 | 示例 | 说明 |
 | --- | --- | --- |
 | Emoji / 文本 | `"icon": "🎯"` | 原样渲染，保留 Emoji 底色。 |
-| 本地 ICO | `"icon": "./favicon.ico"` | 读取 `modules/<physical_directory>/` 内的文件，后端转为 RGBA PNG。 |
+| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` | 读取 `modules/<physical_directory>/` 内的文件；校验魔数后统一转为 RGBA PNG。 |
 | Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon` / `png` / `svg+xml`，≤64KB。 |
 | HTTPS URL | `"icon": "https://example.com/icon.png"` | 加载失败降级为 `⚠️`。 |
 
@@ -222,8 +222,11 @@ modules/
 
 - 本地路径只允许模块物理目录内的相对路径，拒绝 `..`、绝对路径、反斜杠和空字节；
 - 使用 `resolve()` 后的真实路径前缀校验，阻断软链接逃逸；
-- ICO 文件 ≤64KB、尺寸 ≤1024×1024，文件头必须是 `00 00 01 00`；
+- 本地 PNG / JPEG / WebP / ICO 文件 ≤64KB、解码尺寸 ≤1024×1024；
+- 不依赖扩展名或 `Content-Type`：PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、
+  ICO `00 00 01 00`，并通过 Pillow 解码校验；
 - 后端使用 Pillow 以 RGBA 打开并转 PNG，保留 Alpha 透明通道；
+- 格式非法返回 415，文件超限返回 413；前端提示“图标格式不支持，请上传 PNG / JPG / WebP 格式”。
 - 图片加载/解码失败统一降级为 `⚠️`，不抛出未捕获异常。
 
 图标接口：`GET /api/modules/icon?key=<key>`（公开，供 `<img>` 加载）。

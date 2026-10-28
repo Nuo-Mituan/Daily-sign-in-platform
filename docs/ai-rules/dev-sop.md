@@ -90,6 +90,10 @@ my_module/          # 可选：根目录或一级子目录
 ```
 
 > `key` 由模块目录名或上传时的 `name` 决定；`config.json` 可另声明 `directory_name` / `legacy_key`。
+>
+> 图标文件放在模块物理目录内，由 `config.json` 的 `icon` 指向。支持 PNG / JPEG / WebP / ICO / SVG；
+> 本地 PNG/JPEG/WebP/ICO 单文件 ≤64KB、解码尺寸 ≤1024×1024，后端会校验文件魔数并统一转为 PNG。
+> JPG/JPEG/WebP 与 PNG 一样必须同时通过扩展名、文件头和 Pillow 解码校验，禁止只信 `Content-Type`。
 
 ### 新增推送驱动
 

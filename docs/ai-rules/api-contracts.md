@@ -41,7 +41,7 @@
 |---|---|---|---|---|---|
 | GET | /api/modules | 是 | - | list[ModuleOut] | 模块列表 |
 | POST | /api/modules/scan | 是 | - | ScanResponse | 扫描磁盘并热加载 |
-| POST | /api/modules/upload | 是 | Multipart: file；Form: name；Query: overwrite | UploadResponse | 上传 ZIP |
+| POST | /api/modules/upload | 是 | Multipart: file；Form: name；Query: overwrite；无独立 icon 字段 | UploadResponse | 上传 ZIP |
 | POST | /api/modules/schedule/preview | 是 | Body: SchedulePreviewRequest | SchedulePreviewResponse | 预览周期与下次日期 |
 | POST | /api/modules/schedule-preview | 是 | Body: SchedulePreviewRequest | SchedulePreviewResponse | 隐藏别名（include_in_schema=False） |
 | GET | /api/modules/{module_id} | 是 | Path: module_id (int) | ModuleDetail | 模块详情 |
@@ -52,6 +52,18 @@
 | POST | /api/modules/{module_id}/test | 是（开发者模式） | - | RunResponse | 测试执行；非开发者返回 403 |
 | POST | /api/modules/{module_id}/schedule/regenerate | 是 | - | RegenerateScheduleResponse | 重新生成本期时间 |
 | DELETE | /api/modules/{module_id} | 是 | Path: module_id (int 或 key)；Query: delete_files | MessageResponse | 删除模块 |
+
+### 模块图标契约
+
+- `POST /api/modules/upload` 仅接收 ZIP，没有独立的 multipart `icon` 字段；图标是模块目录内的文件，
+  由 `config.json` 的 `icon` 相对路径引用。
+- `GET /api/modules/icon?key=<key>&path=icon.jpg` 公开读取模块物理目录内的图标。
+- 允许扩展名：`.ico` / `.png` / `.jpg` / `.jpeg` / `.webp` / `.svg`；白名单 MIME：
+  `image/png`、`image/jpeg`、`image/jpg`、`image/webp`。
+- 安全校验不依赖 `Content-Type`：PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、
+  ICO `00 00 01 00`，并通过 Pillow 解码/尺寸校验；伪扩展名或魔数不符返回 415。
+- 单文件上限 64KB、解码像素上限 1024×1024；超过大小返回 413。PNG/JPEG/WebP/ICO 输出统一为
+  `image/png`，SVG 原样返回但拒绝脚本/实体。
 
 ## 推送
 
