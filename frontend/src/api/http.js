@@ -38,6 +38,12 @@ function extractMessage(error) {
   if (!error.response) return '无法连接服务器，请检查后端服务是否运行'
   if (error.response.status === 401) return '登录状态已失效，请重新登录'
   if (error.response.status === 403) return '请求校验失败，请刷新页面后重试'
+  if (error.response.status === 415) {
+    return '图标格式不支持，请上传 PNG / JPG / WebP 格式'
+  }
+  if (error.response.status === 413) {
+    return '图标文件过大，请压缩后重试'
+  }
   return `请求失败（HTTP ${error.response.status}）`
 }
 

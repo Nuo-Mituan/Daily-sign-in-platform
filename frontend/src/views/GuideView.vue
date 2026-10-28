@@ -373,7 +373,7 @@ const configFields = [
   { name: 'description', type: 'string', required: true, desc: '一句话说明模块用途，展示在模块卡片上。' },
   { name: 'author', type: 'string', required: false, desc: '作者或维护者名称。' },
   { name: 'version', type: 'string', required: false, desc: '模块版本号，默认 1.0.0。' },
-  { name: 'icon', type: 'string', required: false, desc: '模块图标：Emoji、./favicon.ico、Base64 Data URI 或 HTTPS URL，默认 🧩。' },
+  { name: 'icon', type: 'string', required: false, desc: '模块图标：Emoji、./favicon.png/.jpg/.jpeg/.webp/.ico、Base64 Data URI 或 HTTPS URL，默认 🧩。' },
   { name: 'directory_name', type: 'string', required: false, desc: '物理模块目录名，最多 80 字符；为空时回退使用模块 key。用于 API key 与目录名独立演进。' },
   { name: 'legacy_key', type: 'string', required: false, desc: '目录改名时显式指定要保留的旧 API key；仅当旧 key 对应目录已不存在时生效，避免同名模块串用配置。' },
   { name: 'default_start_time', type: 'string', required: true, desc: '默认开始时间 HH:mm，例如 08:00。' },

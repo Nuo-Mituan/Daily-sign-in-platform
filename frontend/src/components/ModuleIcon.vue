@@ -19,7 +19,12 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { classifyModuleIcon, isImageContentType, moduleIconUrl } from '@/utils/moduleIcon'
+import {
+  classifyModuleIcon,
+  iconHttpErrorMessage,
+  isImageContentType,
+  moduleIconUrl,
+} from '@/utils/moduleIcon'
 
 const props = defineProps({
   icon: { type: String, default: '🧩' },
@@ -54,6 +59,7 @@ async function loadLocalIcon(kind) {
       { credentials: 'include', cache: 'no-store' },
     )
     if (!response.ok) {
+      failureReason.value = iconHttpErrorMessage(response.status)
       throw new Error(`HTTP ${response.status}`)
     }
     const type = response.headers.get('content-type') || ''
@@ -66,8 +72,9 @@ async function loadLocalIcon(kind) {
     if (revision === requestRevision) {
       imageSrc.value = ''
       failed.value = true
-      failureReason.value = 'network'
+      failureReason.value = failureReason.value || 'network'
       console.warn('[ModuleIcon] icon load failed', {
+        reason: failureReason.value,
         moduleKey: props.moduleKey,
         icon: props.icon,
         type: kind.type,

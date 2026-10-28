@@ -2,7 +2,7 @@
 // mounting Vue. Priority: legacy base64 fields, data URI, HTTPS, local file,
 // then Emoji/text. Anything path-like but unsafe is a hard fallback to ⚠️.
 export const DATA_URI_RE = /^data:image\/(x-icon|png|svg\+xml);base64,[A-Za-z0-9+/=]+$/
-const LOCAL_EXT_RE = /\.(ico|png|svg|jpe?g|webp|gif)$/i
+const LOCAL_EXT_RE = /\.(ico|png|svg|jpe?g|webp)$/i
 const UNSAFE_PATH_RE = /(^|[\\/])\.\.([\\/]|$)|\\|\0/
 
 export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', moduleKey = '' } = {}) {
@@ -52,6 +52,13 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
 
 export function isImageContentType(value = '') {
   return /^image\//i.test(String(value))
+}
+
+export function iconHttpErrorMessage(status) {
+  if (status === 415) return '图标格式不支持，请上传 PNG / JPG / WebP 格式'
+  if (status === 413) return '图标文件过大，请压缩后重试'
+  if (status === 404) return '图标不存在，请检查模块图标路径'
+  return ''
 }
 
 export function moduleIconUrl(key, path = 'icon.ico') {
