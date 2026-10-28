@@ -3,8 +3,8 @@
 > ## v1.0.5 Release
 >
 > 本次 v1.0.5 版本包含统一环形日志、AES-256-GCM v2 安全基础、推送驱动与独立/统一推送、
-> 开发者模式，以及模块图标系统（Emoji / 本地 ICO / Base64 / HTTPS URL）。
-> 本地 ICO 经 RGBA PNG 转换保留 Alpha 透明通道，并提供路径沙箱、Magic Bytes、大小/尺寸限制与统一降级。
+> 开发者模式，以及模块图标系统（Emoji / 本地 PNG/JPG/WebP/ICO / Base64 / HTTPS URL）。
+> 本地 PNG/JPG/WebP/ICO 经 RGBA PNG 转换保留 Alpha 透明通道，并提供路径沙箱、Magic Bytes、大小/尺寸限制与统一降级。
 >
 > - 发布与变更管制：[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md)
 > - Docker 验证 SOP：[docs/DOCKER_GATE_SOP.md](docs/DOCKER_GATE_SOP.md)
@@ -60,7 +60,7 @@
 
 ## 核心特性
 
-- **多源模块图标**：支持 Emoji、本地 ICO、Base64 Data URI、HTTPS URL；本地 ICO 自动转 RGBA PNG 保留透明通道，非法或加载失败统一降级为 ⚠️。
+- **多源模块图标**：支持 Emoji、本地 PNG/JPG/WebP/ICO、Base64 Data URI、HTTPS URL；本地栅格图标自动转 RGBA PNG 保留透明通道，非法或加载失败统一降级为 ⚠️。
 - **模块热插拔**：上传 ZIP 或把模块目录放进 `modules/` 后点击扫描，无需重启服务；
   支持 `directory_name` 物理目录名与 `legacy_key` 目录迁移，API key 与磁盘目录解耦。
 - **自动渲染参数表单**：模块通过 `config.json` 声明 `text / textarea / password / select / switch / number` 参数。
@@ -363,26 +363,26 @@ logs/executions/<key>/    # 执行日志文件镜像，按 API key 分组
 | 类型 | `icon` 示例 | 说明 |
 | --- | --- | --- |
 | Emoji / 文本 | `"icon": "🎯"` | 原样文本渲染，保留原有底色 |
-| 本地 ICO | `"icon": "./favicon.ico"` | 读取 `modules/<directory_name>/`（未设置时回退 `<key>`）内的文件；后端转 RGBA PNG |
+| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` | 读取 `modules/<directory_name>/`（未设置时回退 `<key>`）内的文件；校验魔数后转 RGBA PNG |
 | Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon`、`png`、`svg+xml`，≤64KB |
 | HTTPS URL | `"icon": "https://example.com/icon.png"` | 远程图片；加载失败降级为 ⚠️ |
 
 ```json
 {
   "name": "示例签到",
-  "icon": "./favicon.ico",
+  "icon": "./favicon.png",
   "script": "main.py"
 }
 ```
 
-本地 ICO 放置位置：
+本地图片放置位置（PNG/JPG/JPEG/WebP/ICO 均可）：
 
 ```text
 modules/
 └── demo_checkin/
     ├── config.json
     ├── main.py
-    └── favicon.ico
+    └── favicon.png
 ```
 
 安全约束：
@@ -390,7 +390,7 @@ modules/
 - 仅允许模块物理目录（`directory_name`，未设置时回退 `key`）自身目录内的相对路径，
   拒绝 `..`、绝对路径、反斜杠和空字节。
 - 使用 `resolve()` 后的真实路径前缀校验，阻断软链接逃逸；路径不存在或越界直接拒绝。
-- 文件大小 ≤64KB、解码尺寸 ≤1024×1024；文件头必须是 ICO magic `00 00 01 00`。
+- 文件大小 ≤64KB、解码尺寸 ≤1024×1024；PNG / JPEG / WebP / ICO 均校验真实文件魔数，不依赖扩展名或 `Content-Type`。
 - 后端使用 Pillow 以 RGBA 打开并转存 PNG，透明 Alpha 通道不会在后端丢失。
 - 前端对 Base64 做 MIME 白名单与正则二次校验，禁止 `javascript:` 等非图片 Data URI。
 - 图片加载失败、文件缺失、非法 Base64 或路径非法时统一显示 `⚠️`，不抛未捕获异常。
@@ -406,7 +406,7 @@ modules/
 
 ### 图标透明背景诊断
 
-本地 ICO 会在后端通过 Pillow 转成 RGBA PNG 返回，透明像素不会被前端容器的渐变底色污染。
+本地 PNG/JPG/WebP/ICO 会在后端通过 Pillow 转成 RGBA PNG 返回，透明像素不会被前端容器的渐变底色污染。
 如仍有异常，使用诊断脚本检查 Base64/文件是否包含 Alpha：
 
 ```bash
@@ -738,10 +738,10 @@ uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 5000
 
 ### 图标透明度诊断
 
-本地 ICO 会在后端转成 RGBA PNG 返回。使用诊断脚本检查文件或 Base64 是否包含 Alpha：
+本地 PNG/JPG/WebP/ICO 会在后端转成 RGBA PNG 返回。使用诊断脚本检查文件或 Base64 是否包含 Alpha：
 
 ```bash
-python3 scripts/check_icon_alpha.py --file modules/demo_checkin/favicon.ico
+python3 scripts/check_icon_alpha.py --file modules/demo_checkin/favicon.png
 python3 scripts/check_icon_alpha.py --base64 'data:image/x-icon;base64,...'
 ```
 
@@ -949,7 +949,7 @@ docker compose up -d
 - 开发者模式：服务端强制校验，支持隔离的测试执行。
 - 系统日志、日志设置、运行时指标 `/api/system/metrics` 与 Prometheus `/metrics`。
 - Docker 非 root 入口：`PUID`/`PGID` 降权，`data/`/`logs/` 700，SQLite 600。
-- 模块图标系统：Emoji、本地 ICO、Base64、HTTPS URL；ICO 转 RGBA PNG，路径沙箱/尺寸/Magic Bytes 限制。
+- 模块图标系统：Emoji、本地 PNG/JPG/WebP/ICO、Base64、HTTPS URL；栅格图标转 RGBA PNG，路径沙箱/尺寸/Magic Bytes 限制。
 - 模块物理目录名 `directory_name` 与 `legacy_key` 迁移；图标、执行与删除均按物理目录读取。
 - 当前测试矩阵：221 个默认测试、5 个 PBT 契约测试、3 个基准测试；前端生产构建通过。
 
