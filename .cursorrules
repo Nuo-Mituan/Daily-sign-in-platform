@@ -1,0 +1,11 @@
+# 项目核心约束（AI 代码生成必读）
+
+- 后端使用 FastAPI + async SQLAlchemy；禁止在 async 路径中直接执行同步阻塞 IO。
+- 所有写接口必须使用 Cookie 会话 + `X-CSRF-Token`；不得重新引入 JWT/Bearer。
+- 敏感参数必须使用 AES-256-GCM v2；不得打印明文凭据。
+- 模块物理目录以 `directory_name` / `physical_directory` 为准，API key 不等于磁盘目录。
+- 文件上传校验必须同时检查 MIME 类型和文件魔数；图标支持 PNG/JPG/JPEG/WebP/ICO/SVG，
+  本地栅格图标 ≤64KB、解码尺寸 ≤1024×1024，禁止仅依赖 Content-Type 或扩展名。
+- 新增/修改状态机必须补充 PBT 契约（`backend/tests/property/`，`@pytest.mark.property`）并更新
+  `backend/app/DESIGN_DECISIONS.md` 的 Contract ID。
+- 不得修改 `frontend/src/components/ModuleIcon.vue` 的已验证安全路径逻辑，除非同步补充测试。
