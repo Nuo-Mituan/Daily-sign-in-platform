@@ -1,6 +1,7 @@
 # Git 相关
 .git
 .gitignore
+.github/
 
 # GitHub Actions / CI 配置
 .github
@@ -20,8 +21,7 @@ __tests__/
 *.test.*
 *.spec.*
 coverage/
-backend/tests
-frontend/tests
+*/tests/
 
 # 依赖缓存 / 构建产物（如果不需要进入镜像）
 node_modules/
@@ -39,8 +39,10 @@ docker-compose*.yml
 your-excluded-folder/
 secret-config.json
 .env.local
-modules/
-backend/observability
+modules/demo_checkin/
+modules/moyu_energy/
+backend/observability/
 pyproject.toml
 pytest.ini
 .cursorruless.md
+.cursorruless
