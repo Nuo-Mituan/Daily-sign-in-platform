@@ -4,8 +4,9 @@
 - 所有写接口必须使用 Cookie 会话 + `X-CSRF-Token`；不得重新引入 JWT/Bearer。
 - 敏感参数必须使用 AES-256-GCM v2；不得打印明文凭据。
 - 模块物理目录以 `directory_name` / `physical_directory` 为准，API key 不等于磁盘目录。
-- 文件上传校验必须同时检查 MIME 类型和文件魔数；图标支持 PNG/JPG/JPEG/WebP/ICO/SVG，
-  本地栅格图标 ≤64KB、解码尺寸 ≤1024×1024，禁止仅依赖 Content-Type 或扩展名。
+- 路径型资源校验扩展名 + 文件魔数；只有 multipart 上传接口才校验 Content-Type + 魔数；
+  禁止对没有 Content-Type 输入的接口描述 MIME 校验。图标支持 ICO/PNG/SVG/JPG/JPEG/WebP，
+  本地栅格图标 ≤64KB、解码尺寸 ≤1024×1024，扩展名必须与真实文件头一致。
 - 新增/修改状态机必须补充 PBT 契约（`backend/tests/property/`，`@pytest.mark.property`）并更新
   `backend/app/DESIGN_DECISIONS.md` 的 Contract ID。
 - 不得修改 `frontend/src/components/ModuleIcon.vue` 的已验证安全路径逻辑，除非同步补充测试。
