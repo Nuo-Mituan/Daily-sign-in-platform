@@ -69,10 +69,35 @@ def test_oversized_dimensions_return_413(tmp_path: Path) -> None:
         load_icon(path)
 
 
-def test_svg_response_has_hardening_headers() -> None:
+def test_icon_response_etag_and_nosniff() -> None:
+    from starlette.requests import Request
     from app.routers.modules import _icon_response
 
-    response = _icon_response(b"<svg/>", "image/svg+xml")
+    request = Request({"type": "http", "headers": []})
+    response = _icon_response(request, b"png", "image/png", 123)
     assert response.headers["x-content-type-options"] == "nosniff"
-    assert response.headers["content-disposition"] == "attachment"
-    assert response.headers["content-security-policy"] == "default-src 'none'"
+    assert response.headers["etag"].startswith('"123-')
+    assert response.headers["cache-control"].endswith("must-revalidate")
+
+
+def test_svg_comment_prologue_is_detected() -> None:
+    from app.services.module_icon import _detect_icon_format
+
+    assert _detect_icon_format(
+        b"<!-- generated -->\n<svg xmlns='http://www.w3.org/2000/svg'/>"
+    ) == "SVG"
+
+
+def test_decompression_bomb_maps_to_413(monkeypatch, tmp_path: Path) -> None:
+    import app.services.module_icon as icon_module
+    from app.services.module_icon import ModuleIconTooLarge
+
+    path = tmp_path / "icon.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 10)
+
+    def bomb(*args, **kwargs):
+        raise icon_module.Image.DecompressionBombError("too large")
+
+    monkeypatch.setattr(icon_module.Image, "open", bomb)
+    with pytest.raises(ModuleIconTooLarge):
+        load_icon(path)

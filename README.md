@@ -363,7 +363,7 @@ logs/executions/<key>/    # 执行日志文件镜像，按 API key 分组
 | 类型 | `icon` 示例 | 说明 |
 | --- | --- | --- |
 | Emoji / 文本 | `"icon": "🎯"` | 原样文本渲染，保留原有底色 |
-| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` / `.svg` | 读取 `modules/<directory_name>/`（未设置时回退 `<key>`）内的文件；栅格图校验魔数后转 RGBA PNG，SVG 白名单净化 |
+| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` / `.svg` | 读取 `modules/<directory_name>/`（未设置时回退 `<key>`）内的文件；栅格图校验魔数后转 RGBA PNG，SVG 当前无栅格化依赖时返回 415 |
 | Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon`、`png`、`svg+xml`，≤64KB |
 | HTTPS URL | `"icon": "https://example.com/icon.png"` | 远程图片；加载失败降级为 ⚠️ |
 
@@ -391,6 +391,7 @@ modules/
   拒绝 `..`、绝对路径、反斜杠和空字节。
 - 使用 `resolve()` 后的真实路径前缀校验，阻断软链接逃逸；路径不存在或越界直接拒绝。
 - 文件大小 ≤64KB、解码尺寸 ≤1024×1024；PNG / JPEG / WebP / ICO 的扩展名必须与真实文件魔数一致。
+- SVG 必须栅格化为 PNG；当前镜像未安装 cairosvg/svglib，SVG 返回 415，不原样返回 `image/svg+xml`。
 - 后端使用 Pillow 以 RGBA 打开并转存 PNG，透明 Alpha 通道不会在后端丢失。
 - 前端对 Base64 做图片类型白名单与正则二次校验，禁止 `javascript:` 等非图片 Data URI。
 - 图片加载失败、文件缺失、非法 Base64 或路径非法时统一显示 `⚠️`，不抛未捕获异常。

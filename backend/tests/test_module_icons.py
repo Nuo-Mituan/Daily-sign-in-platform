@@ -72,7 +72,14 @@ async def test_local_ico_endpoint_validation_and_headers() -> None:
             assert mapped.status_code == 200
             assert mapped.headers["content-type"].startswith("image/png")
             assert response.headers["content-type"].startswith("image/png")
-            assert response.headers["cache-control"] == "public, max-age=86400"
+            assert response.headers["cache-control"] == "public, max-age=86400, must-revalidate"
+            assert response.headers["etag"]
+            not_modified = await client.get(
+                "/api/modules/icon",
+                params={"key": key},
+                headers={"If-None-Match": response.headers["etag"]},
+            )
+            assert not_modified.status_code == 304
             decoded = Image.open(BytesIO(response.content))
             assert decoded.mode == "RGBA"
             assert decoded.getchannel("A").getextrema()[0] == 0
@@ -96,8 +103,8 @@ async def test_local_ico_endpoint_validation_and_headers() -> None:
             svg_response = await client.get(
                 "/api/modules/icon", params={"key": key, "path": "icon.svg"}
             )
-            assert svg_response.status_code == 200
-            assert svg_response.headers["content-type"].startswith("image/svg+xml")
+            assert svg_response.status_code == 415
+            assert "image/svg+xml" not in svg_response.headers.get("content-type", "")
 
             ico.write_bytes(b"\x00\x00\x01\x00" + b"\x00" * (64 * 1024))
             too_large = await client.get("/api/modules/icon", params={"key": key})

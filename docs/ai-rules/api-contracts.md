@@ -63,10 +63,11 @@
   PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、ICO `00 00 01 00`、
   SVG `<svg` / `<?xml`。扩展名与真实格式不一致、或魔数不识别的返回 415。
 - 后端再通过 Pillow 解码/尺寸校验；不宣称 MIME 白名单，因为该接口不接收 MIME 头。
-- 单文件上限 64KB、解码像素上限 1024×1024；超限返回 413。PNG/JPEG/WebP/ICO 输出统一为
-  `image/png`；SVG 经标签/属性白名单净化后以 `image/svg+xml` 返回，并附加
-  `X-Content-Type-Options: nosniff`、`Content-Disposition: attachment`、
-  `Content-Security-Policy: default-src 'none'`。
+- 单文件上限 64KB、解码像素上限 1024×1024；超限返回 413。
+- PNG/JPEG/WebP/ICO 输出统一为 `image/png`；SVG 必须先栅格化为 PNG。当前镜像未安装
+  cairosvg/svglib，SVG 返回 415；不得原样返回 `image/svg+xml`。
+- 响应统一带 `X-Content-Type-Options: nosniff`、`ETag` 与
+  `Cache-Control: public, max-age=86400, must-revalidate`，支持 `If-None-Match` 304。
 - 该接口免鉴权（`<img>` 直接加载），仅暴露模块目录内图标；仍建议在网络层限制
   `/api/modules/icon` 的访问来源，避免图标资源被匿名批量枚举。
 

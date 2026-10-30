@@ -91,10 +91,10 @@ my_module/          # 可选：根目录或一级子目录
 
 > `key` 由模块目录名或上传时的 `name` 决定；`config.json` 可另声明 `directory_name` / `legacy_key`。
 >
-> 图标文件放在模块物理目录内，由 `config.json` 的 `icon` 指向。支持 PNG / JPEG / WebP / ICO / SVG；
+> 图标文件放在模块物理目录内，由 `config.json` 的 `icon` 指向。识别 PNG / JPEG / WebP / ICO / SVG；SVG 当前无栅格化依赖时返回 415；
 > 本地 PNG/JPEG/WebP/ICO 单文件 ≤64KB、解码尺寸 ≤1024×1024，后端会校验文件魔数并统一转为 PNG。
 > 扩展名必须与文件头实际格式一致（.jpg 不能装 PNG、.webp 不能装 JPEG）；文件头再经 Pillow 解码校验。
-> SVG 必须经过标签/属性白名单净化，禁止 script/foreignObject/事件属性/外部 href/style，并附加安全响应头。
+> SVG 必须栅格化为 PNG 后输出；当前镜像未安装栅格化依赖时返回 415，禁止原样返回 svg+xml。
 
 ### 新增推送驱动
 

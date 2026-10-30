@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import asyncio
 import concurrent.futures
 import json
@@ -718,14 +720,17 @@ def _cache_put(cache_key: tuple[str, int], data: bytes, media_type: str) -> None
             _ICON_CACHE.popitem(last=False)
 
 
-def _icon_response(data: bytes, media_type: str) -> Response:
-    headers = {"Cache-Control": "public, max-age=86400"}
-    if media_type == "image/svg+xml":
-        headers.update({
-            "X-Content-Type-Options": "nosniff",
-            "Content-Disposition": "attachment",
-            "Content-Security-Policy": "default-src 'none'",
-        })
+def _icon_response(
+    request: Request, data: bytes, media_type: str, mtime_ns: int
+) -> Response:
+    etag = f'"{mtime_ns}-{hashlib.sha256(data).hexdigest()[:16]}"'
+    headers = {
+        "Cache-Control": "public, max-age=86400, must-revalidate",
+        "ETag": etag,
+        "X-Content-Type-Options": "nosniff",
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
     return Response(content=data, media_type=media_type, headers=headers)
 
 
@@ -793,7 +798,7 @@ async def module_icon(
     cached = _cache_get(cache_key)
     if cached is not None:
         data, media_type = cached
-        return _icon_response(data, media_type)
+        return _icon_response(request, data, media_type, current_mtime)
 
     pool = _get_icon_decode_pool()
     try:
@@ -830,7 +835,7 @@ async def module_icon(
         "解析模块图标：key=%s directory=%s path=%s resolved=%s",
         key, directory, path, candidate,
     )
-    return _icon_response(data, media_type)
+    return _icon_response(request, data, media_type, current_mtime)
 
 
 @router.get("/{module_id}", response_model=ModuleDetail, summary="模块详情、账号与执行时间")

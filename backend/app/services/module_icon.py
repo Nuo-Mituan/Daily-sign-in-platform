@@ -5,9 +5,13 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 import re
-import xml.etree.ElementTree as ET
 
 from PIL import Image, UnidentifiedImageError
+
+try:  # Optional SVG rasterizer; not installed by default.
+    import cairosvg as _cairosvg
+except ImportError:  # pragma: no cover - depends on deployment extras
+    _cairosvg = None
 
 MAX_ICON_BYTES = 64 * 1024
 MAX_ICON_PIXELS = 1024 * 1024
@@ -20,12 +24,6 @@ ICON_FORMAT_BY_SUFFIX = {
     ".webp": "WEBP",
     ".svg": "SVG",
 }
-_SVG_TAGS = frozenset({
-    "svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline",
-    "polygon", "text", "tspan", "defs", "linearGradient",
-    "radialGradient", "stop", "clipPath", "mask",
-})
-_SVG_URL_RE = re.compile(r"url\s*\(\s*['\"]?\s*(?!#)", re.IGNORECASE)
 
 
 class ModuleIconError(Exception):
@@ -67,17 +65,14 @@ def _decode_pillow(data: bytes, fmt: str) -> bytes:
             return output.getvalue()
     except ModuleIconError:
         raise
-    except (
-        UnidentifiedImageError,
-        OSError,
-        ValueError,
-        Image.DecompressionBombError,
-    ) as exc:
+    except Image.DecompressionBombError as exc:
+        raise ModuleIconTooLarge() from exc
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise ModuleIconInvalid() from exc
 
 
 def _detect_icon_format(data: bytes) -> str | None:
-    """Detect the real format from magic bytes; never trust the suffix."""
+    """Identify the real format from magic bytes; never trust the suffix."""
     if data[:4] == b"\x00\x00\x01\x00":
         return "ICO"
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
@@ -94,38 +89,46 @@ def _detect_icon_format(data: bytes) -> str | None:
         text = data.decode("utf-8", errors="strict").lstrip("\ufeff \t\r\n")
     except UnicodeDecodeError:
         return None
-    lowered = text.lower()
-    if not (text.startswith("<?xml") or text.startswith("<svg")):
-        return None
-    if any(token in lowered for token in (
-        "<!doctype", "<!entity", "<script", "<foreignobject",
-        "<use", "<image", "<a ", "onload=", "javascript:",
-    )):
-        return None
-    return "SVG"
+    # Skip XML declarations and comments before the root <svg> element.
+    while text.startswith("<?xml") or text.startswith("<!--"):
+        if text.startswith("<?xml"):
+            end = text.find("?>")
+        else:
+            end = text.find("-->")
+        if end < 0:
+            return None
+        text = text[end + (2 if text.startswith("<?xml") else 3):].lstrip()
+    return "SVG" if text.startswith("<svg") else None
 
 
-def _sanitize_svg(data: bytes) -> bytes:
-    """Whitelist-parse SVG; reject scripts, external refs and event handlers."""
+_SVG_MALICIOUS_RE = re.compile(
+    r"<script|<foreignobject|<!doctype|<!entity|javascript:|"
+    r"\bon[a-z]+\s*=|@import|"
+    r"url\s*\(\s*['\"]?\s*(?!#|data:image/)|"
+    r"href\s*=\s*['\"]\s*(?!#|data:image/)",
+    re.IGNORECASE,
+)
+
+
+def _reject_dangerous_svg(data: bytes) -> None:
+    """Single malicious-content gate used before any SVG rasterization."""
+    lowered = data.decode("utf-8", errors="ignore")
+    if _SVG_MALICIOUS_RE.search(lowered):
+        raise ModuleIconInvalid()
+
+
+def _svg_to_png(data: bytes) -> bytes:
+    """Rasterize SVG to PNG; reject if no safe rasterizer is available."""
+    _reject_dangerous_svg(data)
+    if _cairosvg is None:
+        raise ModuleIconInvalid()
     try:
-        text = data.decode("utf-8", errors="strict")
-        root = ET.fromstring(text)
-    except (UnicodeDecodeError, ET.ParseError, ValueError) as exc:
+        png = _cairosvg.svg2png(bytestring=data)
+    except Exception as exc:
         raise ModuleIconInvalid() from exc
-
-    for element in root.iter():
-        if not isinstance(element.tag, str):
-            raise ModuleIconInvalid()
-        tag = element.tag.rsplit("}", 1)[-1]
-        if tag not in _SVG_TAGS:
-            raise ModuleIconInvalid()
-        for name, value in element.attrib.items():
-            attr = name.rsplit("}", 1)[-1].lower()
-            if attr.startswith("on") or attr in {"href", "style"}:
-                raise ModuleIconInvalid()
-            if _SVG_URL_RE.search(value or ""):
-                raise ModuleIconInvalid()
-    return ET.tostring(root, encoding="utf-8")
+    if not png:
+        raise ModuleIconInvalid()
+    return _decode_pillow(png, "PNG")
 
 
 def load_icon(candidate: Path) -> tuple[bytes, str, int]:
@@ -162,4 +165,4 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         # Raster icons are normalized to PNG so the response MIME always
         # matches the actual bytes, including JPEG/WebP inputs.
         return _decode_pillow(data, actual), "image/png", stat.st_mtime_ns
-    return _sanitize_svg(data), "image/svg+xml", stat.st_mtime_ns
+    return _svg_to_png(data), "image/png", stat.st_mtime_ns
