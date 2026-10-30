@@ -13,6 +13,8 @@ README.md
 LICENSE
 docs/
 *.md
+.cursorruless
+.cursorruless.md
 
 # 测试相关
 tests/
@@ -44,5 +46,3 @@ modules/moyu_energy/
 backend/observability/
 pyproject.toml
 pytest.ini
-.cursorruless.md
-.cursorruless
