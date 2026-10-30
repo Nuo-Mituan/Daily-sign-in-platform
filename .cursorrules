@@ -1,12 +1,32 @@
+<!-- 本文件为唯一 AI 规则权威，禁止另建 .cursorrules.md 等副本。 -->
 # Daily Check-in Platform — AI 代码生成核心约束
 
 ## 项目定位与版本锚点
 
 - 项目：自托管每日签到平台；后端 FastAPI + async SQLAlchemy + APScheduler + SQLite/PostgreSQL，
-  前端 Vue 3 + Pinia + Axios + Element Plus。
+  前端 Vue 3 + Pinia + Axios + Element Plus；单管理员模型。
 - 当前版本锚点：`1.0.5`，以 `backend/app/config.py` 的 `app_version`、`pyproject.toml`、
-  `Dockerfile` / `Dockerfile.dev` 的实际值为准；修改版本时必须同步检查这些位置与 CHANGELOG。
+  `frontend/package.json`、`Dockerfile` / `Dockerfile.dev` 的实际值为准；修改版本时必须同步检查
+  这些位置与 `CHANGELOG.md`。
 - 模块物理目录以 `directory_name` / `physical_directory` 为准，API `key` 不等于磁盘目录。
+- 技术债未清零：TD-1/2/4 见 `docs/ai-rules/constraints.md`；历史清单见 `docs/TECH_DEBT.md`。
+
+## 核心约束（每次修改前必读）
+
+1. **认证**：Cookie 会话 + CSRF；禁止在 localStorage 存储认证信息（仅允许清理旧版遗留 key）。
+2. **分层**：Service 层不得新增 FastAPI Request/Response 依赖；现有例外仅限
+   `services/auth_sessions.py`（Response）与 `services/module_upload.py`（UploadFile），重构时移除。
+3. **加密**：敏感数据必须使用 `crypto.py` v2（AES-256-GCM + HKDF-SHA256）。
+4. **日志**：统一走 `ring_log` 环形日志；禁止直接写日志文件；`execution_logs.output` 已废弃，
+   正常路径不得写入，仅 ring_log 写失败时允许紧急 fallback。
+5. **推送**：遵循 `push_drivers/` 注册表模式；自定义驱动不是安全沙箱。
+6. **调度**：仅支持 5 种合法周期 daily/weekly/monthly_15/monthly/yearly + 子选项联动。
+7. **数据**：既有库 schema 变更通过 `migrations.py` 的 ALTER TABLE；`main.py#patch_schema`
+   仅保留 `users.password_must_change` 启动兼容补丁，不再新增变更。
+8. **API 兼容**：字段只能新增，不得随意删除/改名/改变类型；错误状态码与响应结构保持稳定。
+9. **异步安全**：禁止在 async 路径直接执行同步阻塞 IO；数据库 Session 必须正确关闭。
+10. **状态机**：修改核心状态机必须先更新 ADR/Contract ID，并补充
+    `backend/tests/property/` PBT；默认测试、PBT、benchmark 与 mypy 均需通过。
 
 ## 必读文档索引
 
@@ -21,22 +41,20 @@
 ## AI 协作原则
 
 - 先读源码和上述文档，再修改；不得凭假设生成不存在的 API、字段、端点或文件。
-- 版本校验：涉及版本号、发布说明或部署镜像时，必须核对 `config.py`、`pyproject.toml`、
-  `Dockerfile*`、`CHANGELOG.md` 的一致性，禁止只改一处。
-- API 兼容优先：字段只能新增，不得随意删除/改名/改变类型；错误状态码与响应结构保持稳定。
-- 修改核心状态机必须先更新 ADR/Contract ID，并补充 `backend/tests/property/` PBT；
-  默认测试、PBT、benchmark 与 mypy 均需通过。
-- 不得在 async 路径直接执行同步阻塞 IO；数据库 Session 必须正确关闭。
-- 敏感参数使用 AES-256-GCM v2；不得打印明文凭据。
-- 所有写接口使用 Cookie 会话 + `X-CSRF-Token`；不得重新引入 JWT/Bearer。
+- 修改前确认影响范围，检查对应索引文档；遵循 dev-sop.md 的闭环流程，不跳步、不过度设计。
+- 涉及加密/调度/推送时，严格遵守 constraints.md 的规格定义。
+- **版本校验**：若用户提到的版本号、CHANGELOG 最新条目，或 `pyproject.toml` /
+  `frontend/package.json` / `config.py` 的版本与本文档声明的 `1.0.5` 不一致，立即提醒用户
+  文档可能过时，并询问是否先执行文档同步，再继续开发。
 - 不修改与本任务无关的前端样式、路由或业务逻辑，除非明确要求并补充测试。
+- 修改 `frontend/src/components/ModuleIcon.vue` 的已验证安全路径逻辑时，必须同步补充前端测试。
 
 ## 文件上传与图标红线
 
 - 路径型资源校验“扩展名 + 文件魔数”；只有 multipart 上传接口才校验
   `Content-Type + 魔数`；禁止对没有 Content-Type 输入的接口描述 MIME 校验。
-- 图标仅来自模块物理目录内文件，支持 ico/png/svg/jpg/jpeg/webp；本地栅格图标
+- 图标仅来自模块物理目录内文件，支持 ico/png/jpg/jpeg/webp；SVG 需栅格化，当前依赖缺失时 415；本地栅格图标
   ≤64KB、解码尺寸 ≤1024×1024，扩展名必须与真实文件头一致。
-- SVG 必须走白名单净化并附加
-  `X-Content-Type-Options: nosniff`、`Content-Disposition: attachment`、
-  `Content-Security-Policy: default-src 'none'`；禁止 script/foreignObject/事件属性/外部 href。
+- SVG 必须栅格化后统一输出 `image/png`，不得原样返回 `image/svg+xml`；
+  未安装 cairosvg/svglib 等可靠栅格化依赖时返回 415。禁止手写白名单净化器作为唯一防线。
+- SVG 栅格化前的恶意内容快速失败只保留一处常量和一处函数；不得在格式检测阶段重复维护黑名单。
