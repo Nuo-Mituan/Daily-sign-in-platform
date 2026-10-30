@@ -1,8 +1,9 @@
 // Icon type resolution is intentionally pure so it can be unit-tested without
 // mounting Vue. Priority: legacy base64 fields, data URI, HTTPS, local file,
 // then Emoji/text. Anything path-like but unsafe is a hard fallback to ⚠️.
+import { ICON_EXT_RE } from '../constants/moduleIcon.js'
+
 export const DATA_URI_RE = /^data:image\/(x-icon|png|svg\+xml);base64,[A-Za-z0-9+/=]+$/
-const LOCAL_EXT_RE = /\.(ico|png|svg|jpe?g|webp)$/i
 const UNSAFE_PATH_RE = /(^|[\\/])\.\.([\\/]|$)|\\|\0/
 
 export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', moduleKey = '' } = {}) {
@@ -30,9 +31,13 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
   }
 
   const looksLocal =
-    value.startsWith('./') || value.includes('/') || LOCAL_EXT_RE.test(value)
+    value.startsWith('./') || value.includes('/') || ICON_EXT_RE.test(value)
   if (looksLocal) {
-    if (!moduleKey || UNSAFE_PATH_RE.test(value)) {
+    if (
+      !moduleKey ||
+      UNSAFE_PATH_RE.test(value) ||
+      (/\.[A-Za-z0-9]+$/.test(value) && !ICON_EXT_RE.test(value))
+    ) {
       return { type: 'fallback', src: '' }
     }
     const relative = value.startsWith('./') ? value.slice(2) : value

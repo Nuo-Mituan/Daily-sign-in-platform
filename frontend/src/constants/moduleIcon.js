@@ -1,0 +1,12 @@
+// Single source of truth for local module icon formats.
+export const ICON_EXTENSIONS = Object.freeze([
+  'ico', 'png', 'svg', 'jpg', 'jpeg', 'webp',
+])
+export const ICON_EXT_RE = new RegExp(
+  `\\.(${ICON_EXTENSIONS.map((ext) => (ext === 'jpg' ? 'jpe?g' : ext)).join('|')})$`,
+  'i',
+)
+
+export function isIconPathLike(value = '') {
+  return /[\\/]/.test(value) || ICON_EXT_RE.test(value)
+}

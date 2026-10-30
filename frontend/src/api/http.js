@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { getCsrfToken, setCsrfToken } from '@/api/csrf'
+import { extractErrorMessage } from '@/api/errorMessage'
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api',
@@ -19,40 +20,13 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-function extractMessage(error) {
-  const data = error.response?.data
-  const detail = data?.detail
-  if (typeof detail === 'string' && detail.trim()) return detail
-  if (Array.isArray(detail)) {
-    const messages = detail
-      .map((item) => {
-        if (typeof item === 'string') return item
-        const path = Array.isArray(item?.loc) ? item.loc.slice(1).join('.') : ''
-        return `${path ? `${path}: ` : ''}${item?.msg || '参数校验失败'}`
-      })
-      .filter(Boolean)
-    if (messages.length) return messages.join('；')
-  }
-  if (typeof data?.message === 'string') return data.message
-  if (error.code === 'ECONNABORTED') return '请求超时，请稍后重试'
-  if (!error.response) return '无法连接服务器，请检查后端服务是否运行'
-  if (error.response.status === 401) return '登录状态已失效，请重新登录'
-  if (error.response.status === 403) return '请求校验失败，请刷新页面后重试'
-  if (error.response.status === 415) {
-    return '图标格式不支持，请上传 PNG / JPG / WebP 格式'
-  }
-  if (error.response.status === 413) {
-    return '图标文件过大，请压缩后重试'
-  }
-  return `请求失败（HTTP ${error.response.status}）`
-}
 
 http.interceptors.response.use(
   (response) => response.data,
   (error) => {
     const status = error.response?.status
     const config = error.config || {}
-    const message = extractMessage(error)
+    const message = extractErrorMessage(error)
 
     if (status === 401) {
       // Remove credentials left by pre-cookie releases.

@@ -223,7 +223,7 @@ modules/
 - 本地路径只允许模块物理目录内的相对路径，拒绝 `..`、绝对路径、反斜杠和空字节；
 - 使用 `resolve()` 后的真实路径前缀校验，阻断软链接逃逸；
 - 本地 PNG / JPEG / WebP / ICO 文件 ≤64KB、解码尺寸 ≤1024×1024；
-- 不依赖扩展名或 `Content-Type`：PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、
+- 扩展名必须与真实魔数一致：PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、
   ICO `00 00 01 00`，并通过 Pillow 解码校验；
 - 后端使用 Pillow 以 RGBA 打开并转 PNG，保留 Alpha 透明通道；
 - 格式非法返回 415，文件超限返回 413；前端提示“图标格式不支持，请上传 PNG / JPG / WebP 格式”。

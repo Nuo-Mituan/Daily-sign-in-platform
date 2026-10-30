@@ -52,3 +52,10 @@ test('builds module icon URL without depending on API object methods', () => {
     '/api/modules/icon?key=demo_checkin&path=favicon.ico',
   )
 })
+
+test('unsupported local extensions fall back without a network request', () => {
+  assert.equal(
+    classifyModuleIcon({ icon: './favicon.gif', moduleKey: key }).type,
+    'fallback',
+  )
+})

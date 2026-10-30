@@ -8,11 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from app.services.module_icon import (
-    ALLOWED_ICON_MIME_TYPES,
-    ModuleIconInvalid,
-    load_icon,
-)
+from app.services.module_icon import ModuleIconInvalid, load_icon
 
 
 @pytest.mark.parametrize(
@@ -33,10 +29,13 @@ def test_raster_icon_magic_is_normalized_to_png(
     assert data.startswith(b"\x89PNG\r\n\x1a\n")
 
 
-def test_icon_mime_contract_includes_jpeg_and_webp() -> None:
-    assert {"image/png", "image/jpeg", "image/jpg", "image/webp"} <= (
-        ALLOWED_ICON_MIME_TYPES
-    )
+def test_suffix_must_match_magic(tmp_path: Path) -> None:
+    output = BytesIO()
+    Image.new("RGB", (2, 2), "red").save(output, format="PNG")
+    path = tmp_path / "icon.jpg"
+    path.write_bytes(output.getvalue())
+    with pytest.raises(ModuleIconInvalid):
+        load_icon(path)
 
 
 def test_unknown_icon_extension_is_rejected(tmp_path: Path) -> None:

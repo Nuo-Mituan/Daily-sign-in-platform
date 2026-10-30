@@ -9,16 +9,15 @@ from PIL import Image, UnidentifiedImageError
 
 MAX_ICON_BYTES = 64 * 1024
 MAX_ICON_PIXELS = 1024 * 1024
-ALLOWED_ICON_MIME_TYPES = frozenset({
-    "image/png",
-    "image/jpeg",
-    "image/jpg",
-    "image/webp",
-})
-ALLOWED_ICON_SUFFIXES = frozenset({
-    ".ico", ".png", ".jpg", ".jpeg", ".webp", ".svg",
-})
-
+# Path-based icons: declared suffix must match the detected file signature.
+ICON_FORMAT_BY_SUFFIX = {
+    ".ico": "ICO",
+    ".png": "PNG",
+    ".jpg": "JPEG",
+    ".jpeg": "JPEG",
+    ".webp": "WEBP",
+    ".svg": "SVG",
+}
 
 class ModuleIconError(Exception):
     def __init__(self, status_code: int, detail: str) -> None:
@@ -66,9 +65,38 @@ def _decode_pillow(data: bytes, fmt: str) -> bytes:
         raise ModuleIconInvalid() from exc
 
 
+def _detect_icon_format(data: bytes) -> str | None:
+    """Detect the real format from magic bytes; never trust the suffix."""
+    if data[:4] == b"\x00\x00\x01\x00":
+        return "ICO"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "PNG"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "JPEG"
+    if (
+        len(data) >= 12
+        and data[:4] == b"RIFF"
+        and data[8:12] == b"WEBP"
+    ):
+        return "WEBP"
+    try:
+        text = data.decode("utf-8", errors="strict").lstrip("\ufeff \t\r\n")
+    except UnicodeDecodeError:
+        return None
+    lowered = text.lower()
+    if not (text.startswith("<?xml") or text.startswith("<svg")):
+        return None
+    if any(token in lowered for token in (
+        "<!doctype", "<!entity", "<script", "javascript:"
+    )):
+        return None
+    return "SVG"
+
+
 def load_icon(candidate: Path) -> tuple[bytes, str, int]:
     """Return (bytes, media_type, mtime_ns); all filesystem work happens here."""
-    if candidate.suffix.lower() not in ALLOWED_ICON_SUFFIXES:
+    declared = ICON_FORMAT_BY_SUFFIX.get(candidate.suffix.lower())
+    if declared is None:
         raise ModuleIconInvalid()
     try:
         stat = candidate.stat()
@@ -82,9 +110,11 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
     if len(data) > MAX_ICON_BYTES:
         raise ModuleIconTooLarge()
 
-    if data[:4] == b"\x00\x00\x01\x00":
-        if len(data) > 256 * 1024:
-            raise ModuleIconInvalid()
+    actual = _detect_icon_format(data)
+    if actual is None or actual != declared:
+        raise ModuleIconInvalid()
+
+    if actual == "ICO":
         if len(data) < 22 or data[2:4] != b"\x01\x00":
             raise ModuleIconInvalid()
         count = int.from_bytes(data[4:6], "little")
@@ -94,26 +124,8 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         height = data[7] or 256
         if not (0 < width <= 256 and 0 < height <= 256):
             raise ModuleIconInvalid()
-        return _decode_pillow(data, "ICO"), "image/png", stat.st_mtime_ns
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return _decode_pillow(data, "PNG"), "image/png", stat.st_mtime_ns
-    if data.startswith(b"\xff\xd8\xff"):
-        return _decode_pillow(data, "JPEG"), "image/png", stat.st_mtime_ns
-    if (
-        len(data) >= 12
-        and data[:4] == b"RIFF"
-        and data[8:12] == b"WEBP"
-    ):
-        return _decode_pillow(data, "WEBP"), "image/png", stat.st_mtime_ns
-
-    try:
-        text = data.decode("utf-8", errors="strict")
-    except UnicodeDecodeError as exc:
-        raise ModuleIconInvalid() from exc
-    text = text.lstrip("\ufeff \t\r\n")
-    lowered = text.lower()
-    if not (text.startswith("<?xml") or text.startswith("<svg")):
-        raise ModuleIconInvalid()
-    if any(token in lowered for token in ("<!doctype", "<!entity", "<script", "javascript:")):
-        raise ModuleIconInvalid()
+    if actual in {"ICO", "PNG", "JPEG", "WEBP"}:
+        # Raster icons are normalized to PNG so the response MIME always
+        # matches the actual bytes, including JPEG/WebP inputs.
+        return _decode_pillow(data, actual), "image/png", stat.st_mtime_ns
     return data, "image/svg+xml", stat.st_mtime_ns
