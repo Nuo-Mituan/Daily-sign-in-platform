@@ -363,7 +363,7 @@ logs/executions/<key>/    # 执行日志文件镜像，按 API key 分组
 | 类型 | `icon` 示例 | 说明 |
 | --- | --- | --- |
 | Emoji / 文本 | `"icon": "🎯"` | 原样文本渲染，保留原有底色 |
-| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` | 读取 `modules/<directory_name>/`（未设置时回退 `<key>`）内的文件；校验魔数后转 RGBA PNG |
+| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` / `.svg` | 读取 `modules/<directory_name>/`（未设置时回退 `<key>`）内的文件；栅格图校验魔数后转 RGBA PNG，SVG 白名单净化 |
 | Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon`、`png`、`svg+xml`，≤64KB |
 | HTTPS URL | `"icon": "https://example.com/icon.png"` | 远程图片；加载失败降级为 ⚠️ |
 

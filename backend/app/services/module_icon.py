@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import re
+import xml.etree.ElementTree as ET
 
 from PIL import Image, UnidentifiedImageError
 
@@ -18,6 +20,13 @@ ICON_FORMAT_BY_SUFFIX = {
     ".webp": "WEBP",
     ".svg": "SVG",
 }
+_SVG_TAGS = frozenset({
+    "svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline",
+    "polygon", "text", "tspan", "defs", "linearGradient",
+    "radialGradient", "stop", "clipPath", "mask",
+})
+_SVG_URL_RE = re.compile(r"url\s*\(\s*['\"]?\s*(?!#)", re.IGNORECASE)
+
 
 class ModuleIconError(Exception):
     def __init__(self, status_code: int, detail: str) -> None:
@@ -49,13 +58,15 @@ def _decode_pillow(data: bytes, fmt: str) -> bytes:
             if image.width <= 0 or image.height <= 0:
                 raise ValueError("invalid dimensions")
             if image.width * image.height > MAX_ICON_PIXELS:
-                raise ValueError("icon dimensions too large")
+                raise ModuleIconTooLarge()
             rgba = image.convert("RGBA")
             if rgba.width * rgba.height > MAX_ICON_PIXELS:
-                raise ValueError("decoded icon dimensions too large")
+                raise ModuleIconTooLarge()
             output = BytesIO()
             rgba.save(output, format="PNG", optimize=True)
             return output.getvalue()
+    except ModuleIconError:
+        raise
     except (
         UnidentifiedImageError,
         OSError,
@@ -87,10 +98,34 @@ def _detect_icon_format(data: bytes) -> str | None:
     if not (text.startswith("<?xml") or text.startswith("<svg")):
         return None
     if any(token in lowered for token in (
-        "<!doctype", "<!entity", "<script", "javascript:"
+        "<!doctype", "<!entity", "<script", "<foreignobject",
+        "<use", "<image", "<a ", "onload=", "javascript:",
     )):
         return None
     return "SVG"
+
+
+def _sanitize_svg(data: bytes) -> bytes:
+    """Whitelist-parse SVG; reject scripts, external refs and event handlers."""
+    try:
+        text = data.decode("utf-8", errors="strict")
+        root = ET.fromstring(text)
+    except (UnicodeDecodeError, ET.ParseError, ValueError) as exc:
+        raise ModuleIconInvalid() from exc
+
+    for element in root.iter():
+        if not isinstance(element.tag, str):
+            raise ModuleIconInvalid()
+        tag = element.tag.rsplit("}", 1)[-1]
+        if tag not in _SVG_TAGS:
+            raise ModuleIconInvalid()
+        for name, value in element.attrib.items():
+            attr = name.rsplit("}", 1)[-1].lower()
+            if attr.startswith("on") or attr in {"href", "style"}:
+                raise ModuleIconInvalid()
+            if _SVG_URL_RE.search(value or ""):
+                raise ModuleIconInvalid()
+    return ET.tostring(root, encoding="utf-8")
 
 
 def load_icon(candidate: Path) -> tuple[bytes, str, int]:
@@ -100,9 +135,8 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         raise ModuleIconInvalid()
     try:
         stat = candidate.stat()
-        if stat.st_size > MAX_ICON_BYTES:
-            raise ModuleIconTooLarge()
-        data = candidate.read_bytes()
+        with candidate.open("rb") as handle:
+            data = handle.read(MAX_ICON_BYTES + 1)
     except ModuleIconError:
         raise
     except (OSError, ValueError) as exc:
@@ -115,7 +149,7 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         raise ModuleIconInvalid()
 
     if actual == "ICO":
-        if len(data) < 22 or data[2:4] != b"\x01\x00":
+        if len(data) < 22:
             raise ModuleIconInvalid()
         count = int.from_bytes(data[4:6], "little")
         if count <= 0:
@@ -128,4 +162,4 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         # Raster icons are normalized to PNG so the response MIME always
         # matches the actual bytes, including JPEG/WebP inputs.
         return _decode_pillow(data, actual), "image/png", stat.st_mtime_ns
-    return data, "image/svg+xml", stat.st_mtime_ns
+    return _sanitize_svg(data), "image/svg+xml", stat.st_mtime_ns

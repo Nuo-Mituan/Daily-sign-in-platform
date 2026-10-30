@@ -25,7 +25,7 @@ import {
   isImageContentType,
   moduleIconUrl,
 } from '@/utils/moduleIcon'
-import { isIconPathLike } from '@/constants/moduleIcon'
+import { looksLikeLocalPath } from '@/constants/moduleIcon'
 
 const props = defineProps({
   icon: { type: String, default: '🧩' },
@@ -85,7 +85,7 @@ async function loadLocalIcon(kind) {
     }
   }
 }
-const isPathLike = computed(() => isIconPathLike(props.icon || ''))
+const isPathLike = computed(() => looksLikeLocalPath(props.icon || ''))
 
 watch(
   () => [props.source, props.iconData, props.moduleKey, props.icon],

@@ -718,6 +718,17 @@ def _cache_put(cache_key: tuple[str, int], data: bytes, media_type: str) -> None
             _ICON_CACHE.popitem(last=False)
 
 
+def _icon_response(data: bytes, media_type: str) -> Response:
+    headers = {"Cache-Control": "public, max-age=86400"}
+    if media_type == "image/svg+xml":
+        headers.update({
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "attachment",
+            "Content-Security-Policy": "default-src 'none'",
+        })
+    return Response(content=data, media_type=media_type, headers=headers)
+
+
 @public_router.get("/icon", summary="读取签到模块本地图标")
 async def module_icon(
     request: Request,
@@ -782,11 +793,7 @@ async def module_icon(
     cached = _cache_get(cache_key)
     if cached is not None:
         data, media_type = cached
-        return Response(
-            content=data,
-            media_type=media_type,
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
+        return _icon_response(data, media_type)
 
     pool = _get_icon_decode_pool()
     try:
@@ -823,11 +830,7 @@ async def module_icon(
         "解析模块图标：key=%s directory=%s path=%s resolved=%s",
         key, directory, path, candidate,
     )
-    return Response(
-        content=data,
-        media_type=media_type,
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
+    return _icon_response(data, media_type)
 
 
 @router.get("/{module_id}", response_model=ModuleDetail, summary="模块详情、账号与执行时间")

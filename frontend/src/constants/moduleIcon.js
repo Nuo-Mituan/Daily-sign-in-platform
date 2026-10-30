@@ -7,6 +7,6 @@ export const ICON_EXT_RE = new RegExp(
   'i',
 )
 
-export function isIconPathLike(value = '') {
+export function looksLikeLocalPath(value = '') {
   return /[\\/]/.test(value) || ICON_EXT_RE.test(value)
 }

@@ -1,12 +1,23 @@
 /**
  * Convert an Axios error into the user-facing message.
- * 413/415 are matched before backend detail so icon upload/serving errors
- * remain actionable even when FastAPI supplies a generic detail string.
+ * Icon-specific messages are scoped to the icon route; ZIP uploads and other
+ * endpoints keep their normal backend detail/generic fallback.
  */
+const ICON_ROUTE_RE = /\/modules\/icon(?:[?#]|$)/
+const ICON_STATUS_MESSAGES = Object.freeze({
+  415: '图标格式不支持，请上传 PNG / JPG / WebP 格式',
+  413: '图标文件过大，请压缩后重试',
+})
+
+export function isIconRequest(error) {
+  return ICON_ROUTE_RE.test(String(error?.config?.url || ''))
+}
+
 export function extractErrorMessage(error) {
   const status = error?.response?.status
-  if (status === 415) return '图标格式不支持，请上传 PNG / JPG / WebP 格式'
-  if (status === 413) return '图标文件过大，请压缩后重试'
+  if (isIconRequest(error) && ICON_STATUS_MESSAGES[status]) {
+    return ICON_STATUS_MESSAGES[status]
+  }
 
   const data = error?.response?.data
   const detail = data?.detail
