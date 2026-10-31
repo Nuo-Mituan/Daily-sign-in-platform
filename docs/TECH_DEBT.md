@@ -45,6 +45,7 @@
 | TD-27 | P3 | `Releases/<version>/frontend/dist` / CI | 前端产物须由构建产出并由 `--dist-source` 参数化注入 payload，禁止手工回填 | 本地 dist 可能过期或缺失 | 发布流水线强制构建并传入 `--dist-source`；本地不提交 dist | 发布负责人 |
 | TD-28 | P1 | `Releases/` | 发布可追溯性依赖 `Releases/MANIFEST`（无 git 历史；1.0.4/1.0.5 无提交基线） | 无法从提交回溯历史发布内容 | 以 `MANIFEST.json`/`MANIFEST.sha256` 为唯一审计凭据，发布前重新生成 | 平台维护者 |
 | TD-29 | P2 | `frontend/` | npm（`package-lock.json`）与 pnpm（`pnpm-lock.yaml`/pnpm store）混用 | lockfile 与安装器不一致，可能产生依赖漂移 | 统一 npm；保留 `package-lock.json`；清理 pnpm lock/tooling 前先评估 | 前端维护者 |
+| TD-30 | P3 | `frontend` UI 文案 | 品牌词“签到云台”未随英文标识调整，待产品确认 | README 与 UI 品牌不一致 | 产品确认后统一，不改则保留双品牌 | 产品/前端维护者 |
 
 ---
 
