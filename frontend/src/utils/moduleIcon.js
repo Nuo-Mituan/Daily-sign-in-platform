@@ -23,6 +23,8 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
   if (/^https?:\/\//i.test(value)) {
     try {
       const parsed = new URL(value)
+      // Dotted last segments (e.g. /assets/1.2) are conservatively treated as
+      // extensions and fall back unless supported; this is intentional.
       const hasExtension = /\.[A-Za-z0-9]+$/.test(parsed.pathname)
       if (hasExtension && !isSupportedIconExtension(parsed.pathname)) {
         return { type: 'fallback', src: '' }

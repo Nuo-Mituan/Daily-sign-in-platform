@@ -12,9 +12,17 @@ export const ICON_GENERIC_CODES = new Set([
 ])
 
 export function iconErrorMessage({ status, code, detail } = {}) {
+  // 404 is only used by ModuleIcon's fetch path; Axios guards 413/415 only.
   if (ICON_GENERIC_CODES.has(code)) {
-    return ICON_STATUS_MESSAGES[status] || ''
+    return (
+      ICON_STATUS_MESSAGES[status] ||
+      (status ? `图标加载失败（HTTP ${status}）` : '图标加载失败')
+    )
   }
   const concrete = typeof detail === 'string' ? detail.trim() : ''
-  return concrete || ICON_STATUS_MESSAGES[status] || ''
+  return (
+    concrete ||
+    ICON_STATUS_MESSAGES[status] ||
+    (status ? `图标加载失败（HTTP ${status}）` : '图标加载失败')
+  )
 }

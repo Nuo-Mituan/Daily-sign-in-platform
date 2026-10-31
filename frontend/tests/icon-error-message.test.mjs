@@ -6,7 +6,7 @@ test('maps icon HTTP failures to actionable Chinese messages', () => {
   assert.equal(iconErrorMessage({ status: 415 }), '图标格式不支持，请使用 PNG / JPG / ICO / WebP')
   assert.equal(iconErrorMessage({ status: 413 }), '图标文件过大，请压缩后重试')
   assert.equal(iconErrorMessage({ status: 404 }), '图标不存在，请检查模块图标路径')
-  assert.equal(iconErrorMessage({ status: 500 }), '')
+  assert.equal(iconErrorMessage({ status: 500 }), '图标加载失败（HTTP 500）')
 })
 
 test('shared function honors generic codes and concrete details', () => {
@@ -22,4 +22,11 @@ test('shared function honors generic codes and concrete details', () => {
     iconErrorMessage({ status: 415, detail: 'SVG 图标已停止支持' }),
     'SVG 图标已停止支持',
   )
+})
+
+
+test('unknown status returns non-empty fallback', () => {
+  assert.equal(iconErrorMessage({ status: 500 }), '图标加载失败（HTTP 500）')
+  assert.equal(iconErrorMessage({ status: 502, detail: '   ' }), '图标加载失败（HTTP 502）')
+  assert.equal(iconErrorMessage({}), '图标加载失败')
 })

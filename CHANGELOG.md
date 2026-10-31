@@ -26,8 +26,9 @@
   deprecated stub.
 - Icon endpoint 403 detail no longer echoes internal directory names or regex details;
   status code remains 403 and full reason remains in logs.
-- Remote icon URLs with an `.svg` pathname (including query strings) are blocked at the
-  frontend before any network request.
+- Remote icon URLs must use an extension in ico/png/jpg/jpeg/webp; `.svg` and other
+  unsupported extensions are now blocked at the frontend and fall back without a
+  network request.
 - Unified frontend icon error handling in one shared function used by both Axios and
   ModuleIcon fetch paths (generic codes fall back to fixed copy; concrete details win).
 
@@ -37,6 +38,8 @@
   WebP, or ICO. The repository scan found no existing module SVG icons.
 - Site favicons (`frontend/public/favicon.svg`) and inline UI `<svg>` brand graphics are not
   module icons and are unaffected.
+- Remote icons with previously-renderable but unsupported extensions (e.g. GIF) now fall
+  back; switch them to PNG/JPG/JPEG/WebP.
 
 ## Unreleased
 
