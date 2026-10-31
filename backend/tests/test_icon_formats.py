@@ -102,3 +102,28 @@ def test_svg_suffix_has_explicit_deprecation_detail(tmp_path: Path) -> None:
         load_icon(path)
     assert exc.value.status_code == 415
     assert "SVG 图标已停止支持" in exc.value.detail
+
+
+def test_default_icon_errors_expose_stable_codes(tmp_path: Path) -> None:
+    from app.services.module_icon import ModuleIconTooLarge
+
+    bad = tmp_path / "icon.png"
+    bad.write_bytes(b"not a png")
+    with pytest.raises(ModuleIconInvalid) as invalid:
+        load_icon(bad)
+    assert invalid.value.code == "icon_format_default"
+
+    huge = tmp_path / "huge.png"
+    Image.new("RGB", (1025, 1025), "red").save(huge, format="PNG")
+    with pytest.raises(ModuleIconTooLarge) as too_large:
+        load_icon(huge)
+    assert too_large.value.code == "icon_size_default"
+
+
+def test_svg_deprecation_has_no_structured_code(tmp_path: Path) -> None:
+    path = tmp_path / "icon.svg"
+    path.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    with pytest.raises(ModuleIconInvalid) as exc:
+        load_icon(path)
+    assert exc.value.detail == "SVG 图标已停止支持，请改用 PNG 格式"
+    assert exc.value.code is None

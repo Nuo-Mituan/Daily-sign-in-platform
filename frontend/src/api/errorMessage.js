@@ -8,11 +8,11 @@ const ICON_STATUS_MESSAGES = Object.freeze({
   415: '图标格式不支持，请使用 PNG / JPG / ICO / WebP',
   413: '图标文件过大，请压缩后重试',
 })
-// Backend detail strings that are too generic to be useful; for these the
-// frontend keeps its actionable icon-specific message.
-const ICON_GENERIC_DETAILS = new Set([
-  '图标格式不合法',
-  '图标文件过大',
+// Stable backend codes that mean "use the generic icon message"; concrete
+// details without these codes are shown directly (e.g. SVG deprecation).
+const ICON_GENERIC_CODES = new Set([
+  'icon_format_default',
+  'icon_size_default',
 ])
 
 export function isIconRequest(error) {
@@ -25,11 +25,11 @@ export function extractErrorMessage(error) {
   const detail = data?.detail
 
   if (isIconRequest(error) && ICON_STATUS_MESSAGES[status]) {
-    const concrete = typeof detail === 'string' ? detail.trim() : ''
-    if (concrete && !ICON_GENERIC_DETAILS.has(concrete)) {
-      return concrete
+    if (ICON_GENERIC_CODES.has(data?.code)) {
+      return ICON_STATUS_MESSAGES[status]
     }
-    return ICON_STATUS_MESSAGES[status]
+    const concrete = typeof detail === 'string' ? detail.trim() : ''
+    return concrete || ICON_STATUS_MESSAGES[status]
   }
 
   if (typeof detail === 'string' && detail.trim()) return detail

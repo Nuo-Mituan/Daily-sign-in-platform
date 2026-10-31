@@ -1,10 +1,10 @@
 # 签到云台 · Daily Check-in Platform
 
-> ## v1.0.5 Release
+> ## v1.0.6 Release
 >
-> 本次 v1.0.5 版本包含统一环形日志、AES-256-GCM v2 安全基础、推送驱动与独立/统一推送、
-> 开发者模式，以及模块图标系统（Emoji / 本地 PNG/JPG/WebP/ICO / Base64 / HTTPS URL）。
-> 本地 PNG/JPG/WebP/ICO 经 RGBA PNG 转换保留 Alpha 透明通道，并提供路径沙箱、Magic Bytes、大小/尺寸限制与统一降级。
+> 本次 v1.0.6 版本包含统一环形日志、AES-256-GCM v2 安全基础、推送驱动与独立/统一推送、
+> 开发者模式，以及模块图标系统。v1.0.6 移除模块 SVG 图标支持（`.svg` 返回 415），
+> 图标支持集统一为 PNG/JPG/JPEG/WebP/ICO；图标错误新增稳定 `code` 字段。
 >
 > - 发布与变更管制：[docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md)
 > - Docker 验证 SOP：[docs/DOCKER_GATE_SOP.md](docs/DOCKER_GATE_SOP.md)
@@ -128,7 +128,7 @@ docker compose logs -f checkin-platform
 ```text
 调度器已启动，时区=Asia/Shanghai
 模块同步完成：新增 2，更新 0，异常 0
-签到云台 v1.0.5 启动完成 | 模块 2 | 已排程 0 | 时区 Asia/Shanghai
+签到云台 v1.0.6 启动完成 | 模块 2 | 已排程 0 | 时区 Asia/Shanghai
 ```
 
 ### 3. 访问
@@ -940,6 +940,12 @@ docker compose up -d
 ---
 
 ## 更新日志
+
+### v1.0.6
+
+- 模块图标停止支持 SVG，`.svg` 返回 415（BREAKING，仅影响模块作者）；同步移除前端 SVG 扩展名、SVG Data URI 与 `.cursorrules` 残留。
+- 图标错误响应新增可选 `code` 字段（`icon_format_default` / `icon_size_default`），状态码与 detail 保持不变。
+- 图标支持集统一为 ico/png/jpg/jpeg/webp，栅格图标统一 `image/png` 输出，新增 ETag、`must-revalidate` 与 304。
 
 ### v1.0.5
 

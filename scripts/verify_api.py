@@ -951,7 +951,7 @@ async def _verify_legacy_cycle_migration() -> None:
 
 
 def _password_from_container_logs() -> str:
-    """Best-effort host-side fallback for v1.0.5 random initial passwords."""
+    """Best-effort host-side fallback for v1.0.6 random initial passwords."""
     container = os.environ.get("CONTAINER_NAME") or os.environ.get("VERIFY_CONTAINER")
     if not container:
         return ""

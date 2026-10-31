@@ -1,6 +1,6 @@
-# Docker 实机门禁执行 SOP（v1.0.5）
+# Docker 实机门禁执行 SOP（v1.0.6）
 
-> 目标：在目标 Linux 宿主机上完成镜像构建、非 root 运行、容器内全量测试、API 验证与网络/SSE 压测，全部通过后方可创建或晋级 `v1.0.5`。
+> 目标：在目标 Linux 宿主机上完成镜像构建、非 root 运行、容器内全量测试、API 验证与网络/SSE 压测，全部通过后方可创建或晋级 `v1.0.6`。
 
 ## 1. 环境要求
 
@@ -21,7 +21,7 @@ docker compose version
 
 ```bash
 git fetch --tags
-git checkout v1.0.5
+git checkout v1.0.6
 cp .env.example .env
 ```
 
@@ -202,8 +202,8 @@ PY
 随后执行：
 
 1. 合并最终压测数据；
-2. 创建/移动 `v1.0.5` Tag；
-3. 将 Release Notes 更新为 **v1.0.5 (Production Ready)**；
+2. 创建/移动 `v1.0.6` Tag；
+3. 将 Release Notes 更新为 **v1.0.6 (Production Ready)**；
 4. 输出发布宣告。
 
 ## 10. 失败处理
@@ -211,4 +211,4 @@ PY
 - 镜像构建失败：检查 Docker/Compose 版本、PUID/PGID、网络代理；
 - pytest 失败：保留容器内 `pytest` 输出与 `/tmp/rc2-tests`；
 - 非 root 失败：检查 entrypoint 的 `setuid/setgid` 与 bind mount 权限；
-- 压测失败：保留 `docs/perf/rc2-after.json` 原始数据与容器日志，不得晋升 v1.0.5。
+- 压测失败：保留 `docs/perf/rc2-after.json` 原始数据与容器日志，不得晋升 v1.0.6。

@@ -86,6 +86,7 @@ GitHub Actions CI/CD │ Nginx/Caddy 反代
 | v1.0.4 | 隐私修复、周期精简为5种 |
 | v1.0.5 | 安全基础 + 环形日志 + 推送驱动 + 双推送 + 模块图标 |
 | v1.0.5 收尾 | PBT、状态机 Playbook v2.1、CI 性能门禁、连接池可观测性（已落地） |
+| v1.0.6 | 移除模块 SVG 图标支持；图标错误结构化 code |
 
 ## 版本演进方向
 - PBT 驱动开发（Hypothesis + CI 双轨）

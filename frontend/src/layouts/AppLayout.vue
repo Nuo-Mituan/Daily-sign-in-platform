@@ -44,7 +44,7 @@
         </div>
         <div class="sidebar-foot">
           <span>Self-hosted</span>
-          <span class="version">v{{ appStore.meta?.version || '1.0.5' }}</span>
+          <span class="version">v{{ appStore.meta?.version || '1.0.6' }}</span>
         </div>
       </div>
     </aside>

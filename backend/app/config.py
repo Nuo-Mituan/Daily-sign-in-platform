@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # ---------------------------------------------------------------- basics
     app_name: str = "签到云台"
-    app_version: str = "1.0.5"
+    app_version: str = "1.0.6"
     api_prefix: str = "/api"
     timezone: str = "Asia/Shanghai"
 

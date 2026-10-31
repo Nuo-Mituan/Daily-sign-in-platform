@@ -104,15 +104,19 @@ async def test_local_ico_endpoint_validation_and_headers() -> None:
                 "/api/modules/icon", params={"key": key, "path": "icon.svg"}
             )
             assert svg_response.status_code == 415
+            assert svg_response.json()["detail"] == "SVG 图标已停止支持，请改用 PNG 格式"
+            assert "code" not in svg_response.json()
             assert "image/svg+xml" not in svg_response.headers.get("content-type", "")
 
             ico.write_bytes(b"\x00\x00\x01\x00" + b"\x00" * (64 * 1024))
             too_large = await client.get("/api/modules/icon", params={"key": key})
             assert too_large.status_code == 413
+            assert too_large.json()["code"] == "icon_size_default"
 
             ico.write_bytes(b"MZ" + b"\x00" * 10)
             not_ico = await client.get("/api/modules/icon", params={"key": key})
             assert not_ico.status_code == 415
+            assert not_ico.json()["code"] == "icon_format_default"
 
             traversal = await client.get(
                 "/api/modules/icon", params={"key": "../../etc/passwd"}

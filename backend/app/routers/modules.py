@@ -24,6 +24,7 @@ from typing import Any, cast
 
 from PIL import Image, UnidentifiedImageError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import JSONResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -830,7 +831,14 @@ async def module_icon(
             "模块图标读取失败：key=%s path=%s resolved=%s detail=%s",
             key, path, candidate, exc.detail,
         )
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        content = {"detail": exc.detail}
+        if exc.code is not None:
+            content["code"] = exc.code
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=content,
+            headers={"Cache-Control": "no-store"},
+        )
     logger.info(
         "解析模块图标：key=%s directory=%s path=%s resolved=%s",
         key, directory, path, candidate,

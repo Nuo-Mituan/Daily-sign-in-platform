@@ -40,7 +40,7 @@
 
 > 当前实现不是完全理想分层：Router 仍有大量直接 `AsyncSession` 操作，`services/auth_sessions.py` 与 `services/module_upload.py` 仍引用 FastAPI 类型，`deps.py` 依赖 `services.auth_sessions`。规则用于约束**新增**代码，存量例外在后续重构中清理。
 
-### v1.0.5 补充核心文件
+### v1.0.6 补充核心文件
 | 文件 | 职责 |
 |---|---|
 | services/legacy_wash.py | 清洗旧版管理员凭据与废弃字段 |

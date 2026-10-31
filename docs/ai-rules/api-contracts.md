@@ -70,6 +70,23 @@
 - 该接口免鉴权（`<img>` 直接加载），仅暴露模块目录内图标；仍建议在网络层限制
   `/api/modules/icon` 的访问来源，避免图标资源被匿名批量枚举。
 
+### 图标错误 code 契约
+
+图标错误响应保持原有 `detail` 与 HTTP 状态码，并新增**可选** `code` 字段：
+
+```json
+{"detail": "图标格式不合法", "code": "icon_format_default"}
+```
+
+| code | 状态码 | 出现条件 | 前端行为 |
+|---|---|---|---|
+| `icon_format_default` | 415 | 默认格式错误（后缀/魔数不匹配、解码失败） | 回退固定 PNG/JPG/ICO/WebP 文案 |
+| `icon_size_default` | 413 | 文件超限、像素超限、DecompressionBomb | 回退固定“文件过大”文案 |
+| 无 `code` | 415 | 例如 SVG 已停止支持的具体迁移提示 | 直接展示后端 `detail` |
+
+- 该字段为向后兼容的新增字段；`code` 为 None 时不输出 `null`，旧响应形态不变。
+- 路径型资源没有 Content-Type 输入；这里不涉及 MIME 校验。
+
 ## 推送
 
 | 方法 | 路径 | 认证 | 参数 | 响应模型 | 用途 |

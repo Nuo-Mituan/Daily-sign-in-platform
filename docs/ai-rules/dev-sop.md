@@ -157,7 +157,8 @@ app.include_router(my_feature.router, prefix=api)
 ### 文档索引
 | 文件 | 说明 |
 |---|---|
-| RELEASE_NOTES_v1.0.5.md | v1.0.5 完整变更 |
+| RELEASE_NOTES_v1.0.5.md | v1.0.5 完整变更（历史） |
+| CHANGELOG.md | 当前 1.0.6 变更 |
 | MODULE_DEVELOPMENT.md | 模块开发规范（32KB） |
 | PRODUCTION_SECURITY.md | 生产安全检查清单 |
 | PUSH_DRIVERS.md | 推送驱动开发规范 |

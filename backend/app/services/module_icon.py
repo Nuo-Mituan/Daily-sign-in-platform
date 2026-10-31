@@ -20,10 +20,13 @@ ICON_FORMAT_BY_SUFFIX = {
 
 
 class ModuleIconError(Exception):
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(
+        self, status_code: int, detail: str, code: str | None = None
+    ) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        self.code = code
 
 
 class ModuleIconNotFound(ModuleIconError):
@@ -33,12 +36,18 @@ class ModuleIconNotFound(ModuleIconError):
 
 class ModuleIconTooLarge(ModuleIconError):
     def __init__(self) -> None:
-        super().__init__(413, "图标文件过大")
+        super().__init__(
+            413, "图标文件过大", code="icon_size_default"
+        )
 
 
 class ModuleIconInvalid(ModuleIconError):
-    def __init__(self, detail: str = "图标格式不合法") -> None:
-        super().__init__(415, detail)
+    def __init__(
+        self,
+        detail: str = "图标格式不合法",
+        code: str | None = "icon_format_default",
+    ) -> None:
+        super().__init__(415, detail, code)
 
 
 def _decode_pillow(data: bytes, fmt: str) -> bytes:
@@ -87,7 +96,7 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
     if declared is None:
         if candidate.suffix.lower() == ".svg":
             raise ModuleIconInvalid(
-                "SVG 图标已停止支持，请改用 PNG 格式"
+                "SVG 图标已停止支持，请改用 PNG 格式", code=None
             )
         raise ModuleIconInvalid()
     try:

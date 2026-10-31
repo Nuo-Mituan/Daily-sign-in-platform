@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.0.6] - 2026-10-31
+
+### Removed
+
+- **BREAKING (module authors only)**: removed module SVG icon support. `.svg` now returns
+  HTTP 415 with detail `SVG 图标已停止支持，请改用 PNG 格式`; Base64 Data URI no longer
+  accepts `image/svg+xml`. Decision: a hand-written SVG sanitizer as the sole defense has an
+  unacceptable risk/benefit ratio, while rasterizing requires cairosvg/svglib plus system
+  dependencies that are not being introduced in this release.
+
+### Changed
+
+- Unified the module icon format set to ico/png/jpg/jpeg/webp across backend suffix↔magic
+  checks, frontend extension detection, rules, and documentation.
+- Raster icons are always returned as `image/png`; icon responses now include an ETag,
+  `Cache-Control: public, max-age=86400, must-revalidate`, and support `304 Not Modified`.
+- Icon error responses may include an optional stable `code` field
+  (`icon_format_default` / `icon_size_default`); status codes and detail text are unchanged
+  (backward-compatible additive field).
+- Frontend 413/415 icon messages remain scoped to `/modules/icon`; fallback is code-driven,
+  while concrete backend detail (e.g. the SVG deprecation message) is shown when no generic
+  code is present.
+- `.cursorrules` and `.cursorrules.md` were merged into one authority; the latter is now a
+  deprecated stub.
+
+### Migration
+
+- Replace `config.json` `icon` references ending in `.svg` with PNG (recommended), JPG/JPEG,
+  WebP, or ICO. The repository scan found no existing module SVG icons.
+- Site favicons (`frontend/public/favicon.svg`) and inline UI `<svg>` brand graphics are not
+  module icons and are unaffected.
+
 ## Unreleased
 
 ### Changed
