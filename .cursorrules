@@ -26,7 +26,9 @@
 8. **API 兼容**：字段只能新增，不得随意删除/改名/改变类型；错误状态码与响应结构保持稳定。
 9. **异步安全**：禁止在 async 路径直接执行同步阻塞 IO；数据库 Session 必须正确关闭。
 10. **状态机**：修改核心状态机必须先更新 ADR/Contract ID，并补充
-    `backend/tests/property/` PBT；默认测试、PBT、benchmark 与 mypy 均需通过。
+    `backend/tests/property/` PBT；默认测试、PBT 与 benchmark 必须通过。
+11. **类型检查**：改动文件必须通过 mypy；`backend/app` 全量当前有 9 个既有错误
+    （`services/push_delivery.py`、`services/bootstrap.py`），不得新增错误，存量清理另行登记。
 
 ## 必读文档索引
 
@@ -53,8 +55,7 @@
 
 - 路径型资源校验“扩展名 + 文件魔数”；只有 multipart 上传接口才校验
   `Content-Type + 魔数`；禁止对没有 Content-Type 输入的接口描述 MIME 校验。
-- 图标仅来自模块物理目录内文件，支持 ico/png/jpg/jpeg/webp；SVG 需栅格化，当前依赖缺失时 415；本地栅格图标
+- 图标仅来自模块物理目录内文件，支持 ico/png/jpg/jpeg/webp；本地图片
   ≤64KB、解码尺寸 ≤1024×1024，扩展名必须与真实文件头一致。
-- SVG 必须栅格化后统一输出 `image/png`，不得原样返回 `image/svg+xml`；
-  未安装 cairosvg/svglib 等可靠栅格化依赖时返回 415。禁止手写白名单净化器作为唯一防线。
-- SVG 栅格化前的恶意内容快速失败只保留一处常量和一处函数；不得在格式检测阶段重复维护黑名单。
+- SVG 已于本版本停止支持：`.svg` 返回 415，禁止新增 SVG 解析/净化/栅格化代码；
+  若未来恢复，必须采用栅格化 + 成熟净化库，禁止原样返回 `image/svg+xml`。
