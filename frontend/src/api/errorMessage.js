@@ -5,7 +5,7 @@
  */
 const ICON_ROUTE_RE = /\/modules\/icon(?:[?#]|$)/
 const ICON_STATUS_MESSAGES = Object.freeze({
-  415: '图标格式不支持，请上传 PNG / JPG / WebP 格式',
+  415: '图标格式不支持，请使用 PNG / JPG / ICO / WebP',
   413: '图标文件过大，请压缩后重试',
 })
 

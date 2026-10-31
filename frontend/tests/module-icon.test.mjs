@@ -1,13 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { classifyModuleIcon, isImageContentType, moduleIconUrl } from '../src/utils/moduleIcon.js'
+import { isSupportedIconExtension } from '../src/constants/moduleIcon.js'
+
 
 const key = 'demo_checkin'
 const cases = [
   ['./favicon.ico', 'local-path'],
   ['favicon.ico', 'local-path'],
   ['icons/logo.png', 'local-path'],
-  ['/static/icon.svg', 'local-path'],
+  ['/static/icon.svg', 'fallback'],
   ['🚀', 'emoji'],
   ['https://example.com/a.png', 'remote-url'],
   ['data:image/png;base64,iVBORw0KGgo=', 'base64'],
@@ -58,4 +60,10 @@ test('unsupported local extensions fall back without a network request', () => {
     classifyModuleIcon({ icon: './favicon.gif', moduleKey: key }).type,
     'fallback',
   )
+})
+
+
+test('SVG extension is not supported and SVG data URI is rejected', () => {
+  assert.equal(isSupportedIconExtension('icon.svg'), false)
+  assert.equal(classifyModuleIcon({ icon: 'data:image/svg+xml;base64,AAAA', moduleKey: key }).type, 'fallback')
 })

@@ -226,7 +226,7 @@ class ModuleConfig(BaseModel):
                 raise ValueError("Base64 图标不能超过 64KB")
             import re
             if not re.fullmatch(
-                r"data:image/(x-icon|png|svg\+xml);base64,[A-Za-z0-9+/=]+",
+                r"data:image/(x-icon|png);base64,[A-Za-z0-9+/=]+",
                 data_uri,
             ):
                 raise ValueError("图标不是合法的 Base64 图片 Data URI")

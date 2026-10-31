@@ -214,8 +214,8 @@ modules/
 | 类型 | 示例 | 说明 |
 | --- | --- | --- |
 | Emoji / 文本 | `"icon": "🎯"` | 原样渲染，保留 Emoji 底色。 |
-| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` / `.svg` | 读取 `modules/<physical_directory>/` 内的文件；栅格图校验魔数后转 RGBA PNG；SVG 必须栅格化，当前未安装依赖时返回 415。 |
-| Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon` / `png` / `svg+xml`，≤64KB。 |
+| 本地图片 | `"icon": "./favicon.png"` / `.jpg` / `.jpeg` / `.webp` / `.ico` | 读取 `modules/<physical_directory>/` 内的文件；校验魔数后转 RGBA PNG。 |
+| Base64 Data URI | `"icon": "data:image/png;base64,..."` | 仅允许 `x-icon` / `png`，≤64KB。 |
 | HTTPS URL | `"icon": "https://example.com/icon.png"` | 加载失败降级为 `⚠️`。 |
 
 安全约束：
@@ -226,8 +226,7 @@ modules/
 - 扩展名必须与真实魔数一致：PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、
   ICO `00 00 01 00`，并通过 Pillow 解码校验；
 - 后端使用 Pillow 以 RGBA 打开并转 PNG，保留 Alpha 透明通道；
-- SVG 必须先转为 PNG；当前镜像未安装 cairosvg/svglib，因此 SVG 请求返回 415，
-  不允许原样返回 `image/svg+xml`；
+- SVG 已停止支持：`.svg` 请求返回 415，请改用 PNG / JPG / JPEG / WebP / ICO；
 - 格式非法返回 415，文件超限或解码尺寸超限返回 413；前端提示“图标格式不支持，请上传 PNG / JPG / WebP 格式”。
 - 图标响应带 `nosniff`、`ETag` 与 `Cache-Control: public, max-age=86400, must-revalidate`。
 - 图片加载/解码失败统一降级为 `⚠️`，不抛出未捕获异常。
@@ -717,7 +716,7 @@ python -m pytest backend/tests/benchmark -m benchmark --benchmark-only  # 3 pass
 - 完整 API 流程（登录、幂等用户名、随机调度、多账号串行、部分失败、推送配置）；
 - 进阶模板的模拟登录与配置校验；
 - 模块物理目录映射、`legacy_key` 冲突与扫描/上传边界；
-- 图标路径沙箱、ICO/PNG/SVG 校验与降级；
+- 图标路径沙箱、ICO/PNG/JPEG/WebP 校验与降级；
 - 限流器/连接池/关闭状态机的 Property-Based Testing 与性能基准。
 
 ### 13.2 API 验证

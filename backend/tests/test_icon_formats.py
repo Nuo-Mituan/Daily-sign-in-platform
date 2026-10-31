@@ -80,14 +80,6 @@ def test_icon_response_etag_and_nosniff() -> None:
     assert response.headers["cache-control"].endswith("must-revalidate")
 
 
-def test_svg_comment_prologue_is_detected() -> None:
-    from app.services.module_icon import _detect_icon_format
-
-    assert _detect_icon_format(
-        b"<!-- generated -->\n<svg xmlns='http://www.w3.org/2000/svg'/>"
-    ) == "SVG"
-
-
 def test_decompression_bomb_maps_to_413(monkeypatch, tmp_path: Path) -> None:
     import app.services.module_icon as icon_module
     from app.services.module_icon import ModuleIconTooLarge
@@ -101,3 +93,12 @@ def test_decompression_bomb_maps_to_413(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(icon_module.Image, "open", bomb)
     with pytest.raises(ModuleIconTooLarge):
         load_icon(path)
+
+
+def test_svg_suffix_has_explicit_deprecation_detail(tmp_path: Path) -> None:
+    path = tmp_path / "icon.svg"
+    path.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    with pytest.raises(ModuleIconInvalid) as exc:
+        load_icon(path)
+    assert exc.value.status_code == 415
+    assert "SVG 图标已停止支持" in exc.value.detail

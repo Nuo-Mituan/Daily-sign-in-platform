@@ -3,7 +3,7 @@
 // then Emoji/text. Anything path-like but unsafe is a hard fallback to ⚠️.
 import { isSupportedIconExtension } from '../constants/moduleIcon.js'
 
-export const DATA_URI_RE = /^data:image\/(x-icon|png|svg\+xml);base64,[A-Za-z0-9+/=]+$/
+export const DATA_URI_RE = /^data:image\/(x-icon|png);base64,[A-Za-z0-9+/=]+$/
 const UNSAFE_PATH_RE = /(^|[\\/])\.\.([\\/]|$)|\\|\0/
 
 export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', moduleKey = '' } = {}) {
@@ -25,7 +25,7 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
   // Public static paths are safe to use as-is. Other absolute paths are not
   // allowed to reach the module filesystem endpoint.
   if (value.startsWith('/')) {
-    return value.startsWith('/static/')
+    return value.startsWith('/static/') && isSupportedIconExtension(value)
       ? { type: 'local-path', src: value, path: value }
       : { type: 'fallback', src: '' }
   }
@@ -60,7 +60,7 @@ export function isImageContentType(value = '') {
 }
 
 export function iconHttpErrorMessage(status) {
-  if (status === 415) return '图标格式不支持，请上传 PNG / JPG / WebP 格式'
+  if (status === 415) return '图标格式不支持，请使用 PNG / JPG / ICO / WebP'
   if (status === 413) return '图标文件过大，请压缩后重试'
   if (status === 404) return '图标不存在，请检查模块图标路径'
   return ''

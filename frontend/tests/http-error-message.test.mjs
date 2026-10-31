@@ -8,7 +8,7 @@ test('icon route 415 uses icon semantics even with backend detail', () => {
       config: { url: '/modules/icon?key=demo' },
       response: { status: 415, data: { detail: '图标格式不合法' } },
     }),
-    '图标格式不支持，请上传 PNG / JPG / WebP 格式',
+    '图标格式不支持，请使用 PNG / JPG / ICO / WebP',
   )
 })
 

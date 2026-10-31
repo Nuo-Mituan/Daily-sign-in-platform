@@ -4,14 +4,8 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
-import re
 
 from PIL import Image, UnidentifiedImageError
-
-try:  # Optional SVG rasterizer; not installed by default.
-    import cairosvg as _cairosvg
-except ImportError:  # pragma: no cover - depends on deployment extras
-    _cairosvg = None
 
 MAX_ICON_BYTES = 64 * 1024
 MAX_ICON_PIXELS = 1024 * 1024
@@ -22,7 +16,6 @@ ICON_FORMAT_BY_SUFFIX = {
     ".jpg": "JPEG",
     ".jpeg": "JPEG",
     ".webp": "WEBP",
-    ".svg": "SVG",
 }
 
 
@@ -44,8 +37,8 @@ class ModuleIconTooLarge(ModuleIconError):
 
 
 class ModuleIconInvalid(ModuleIconError):
-    def __init__(self) -> None:
-        super().__init__(415, "图标格式不合法")
+    def __init__(self, detail: str = "图标格式不合法") -> None:
+        super().__init__(415, detail)
 
 
 def _decode_pillow(data: bytes, fmt: str) -> bytes:
@@ -85,56 +78,17 @@ def _detect_icon_format(data: bytes) -> str | None:
         and data[8:12] == b"WEBP"
     ):
         return "WEBP"
-    try:
-        text = data.decode("utf-8", errors="strict").lstrip("\ufeff \t\r\n")
-    except UnicodeDecodeError:
-        return None
-    # Skip XML declarations and comments before the root <svg> element.
-    while text.startswith("<?xml") or text.startswith("<!--"):
-        if text.startswith("<?xml"):
-            end = text.find("?>")
-        else:
-            end = text.find("-->")
-        if end < 0:
-            return None
-        text = text[end + (2 if text.startswith("<?xml") else 3):].lstrip()
-    return "SVG" if text.startswith("<svg") else None
-
-
-_SVG_MALICIOUS_RE = re.compile(
-    r"<script|<foreignobject|<!doctype|<!entity|javascript:|"
-    r"\bon[a-z]+\s*=|@import|"
-    r"url\s*\(\s*['\"]?\s*(?!#|data:image/)|"
-    r"href\s*=\s*['\"]\s*(?!#|data:image/)",
-    re.IGNORECASE,
-)
-
-
-def _reject_dangerous_svg(data: bytes) -> None:
-    """Single malicious-content gate used before any SVG rasterization."""
-    lowered = data.decode("utf-8", errors="ignore")
-    if _SVG_MALICIOUS_RE.search(lowered):
-        raise ModuleIconInvalid()
-
-
-def _svg_to_png(data: bytes) -> bytes:
-    """Rasterize SVG to PNG; reject if no safe rasterizer is available."""
-    _reject_dangerous_svg(data)
-    if _cairosvg is None:
-        raise ModuleIconInvalid()
-    try:
-        png = _cairosvg.svg2png(bytestring=data)
-    except Exception as exc:
-        raise ModuleIconInvalid() from exc
-    if not png:
-        raise ModuleIconInvalid()
-    return _decode_pillow(png, "PNG")
+    return None
 
 
 def load_icon(candidate: Path) -> tuple[bytes, str, int]:
     """Return (bytes, media_type, mtime_ns); all filesystem work happens here."""
     declared = ICON_FORMAT_BY_SUFFIX.get(candidate.suffix.lower())
     if declared is None:
+        if candidate.suffix.lower() == ".svg":
+            raise ModuleIconInvalid(
+                "SVG 图标已停止支持，请改用 PNG 格式"
+            )
         raise ModuleIconInvalid()
     try:
         stat = candidate.stat()
@@ -165,4 +119,4 @@ def load_icon(candidate: Path) -> tuple[bytes, str, int]:
         # Raster icons are normalized to PNG so the response MIME always
         # matches the actual bytes, including JPEG/WebP inputs.
         return _decode_pillow(data, actual), "image/png", stat.st_mtime_ns
-    return _svg_to_png(data), "image/png", stat.st_mtime_ns
+    raise ModuleIconInvalid()

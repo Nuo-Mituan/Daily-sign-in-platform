@@ -58,14 +58,13 @@
 - `POST /api/modules/upload` 仅接收 ZIP，没有独立的 multipart `icon` 字段；图标是模块目录内的文件，
   由 `config.json` 的 `icon` 相对路径引用。
 - `GET /api/modules/icon?key=<key>&path=icon.jpg` 公开读取模块物理目录内的图标；`key` 1–80 字符，`path` 默认 `icon.ico`、最长 255 字符。
-- 允许扩展名：`.ico` / `.png` / `.svg` / `.jpg` / `.jpeg` / `.webp`。
+- 允许扩展名：`.ico` / `.png` / `.jpg` / `.jpeg` / `.webp`；`.svg` 已停止支持。
 - 路径型资源没有 Content-Type 输入；校验方式是“扩展名 + 文件魔数”一致性：
-  PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、ICO `00 00 01 00`、
-  SVG `<svg` / `<?xml`。扩展名与真实格式不一致、或魔数不识别的返回 415。
+  PNG `89 50 4E 47`、JPEG `FF D8 FF`、WebP `RIFF....WEBP`、ICO `00 00 01 00`。
+  扩展名与真实格式不一致、或魔数不识别的返回 415；`.svg` 返回 415 并提示改用 PNG。
 - 后端再通过 Pillow 解码/尺寸校验；不宣称 MIME 白名单，因为该接口不接收 MIME 头。
 - 单文件上限 64KB、解码像素上限 1024×1024；超限返回 413。
-- PNG/JPEG/WebP/ICO 输出统一为 `image/png`；SVG 必须先栅格化为 PNG。当前镜像未安装
-  cairosvg/svglib，SVG 返回 415；不得原样返回 `image/svg+xml`。
+- PNG/JPEG/WebP/ICO 输出统一为 `image/png`；不存在 `image/svg+xml` 响应。
 - 响应统一带 `X-Content-Type-Options: nosniff`、`ETag` 与
   `Cache-Control: public, max-age=86400, must-revalidate`，支持 `If-None-Match` 304。
 - 该接口免鉴权（`<img>` 直接加载），仅暴露模块目录内图标；仍建议在网络层限制
