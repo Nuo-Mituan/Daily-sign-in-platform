@@ -1,4 +1,4 @@
-# 签到云台 · Daily Check-in Platform
+# 签到云台 · Modular Check-in Platform
 
 > ## v1.0.6 Release
 >
@@ -104,7 +104,7 @@
 ### 1. 准备目录
 
 ```bash
-cd daily-checkin-platform
+cd modular-check-in-platform
 
 mkdir -p data logs modules
 cp .env.example .env        # 可选：修改端口；ADMIN_PASS 留空则自动生成随机密码
@@ -215,7 +215,7 @@ python3 scripts/verify_api.py --password <首次生成的随机密码>
 ## 目录结构
 
 ```text
-daily-checkin-platform/
+modular-check-in-platform/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI 入口、lifespan、静态文件托管
