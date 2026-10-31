@@ -770,7 +770,7 @@ async def module_icon(
         )
         raise HTTPException(
             status_code=403,
-            detail=f"模块 {key} 的 directory_name={directory!r} 不合法：{exc}",
+            detail="模块标识不合法",
         ) from exc
     if "\x00" in path or "\\" in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="图标路径不合法")

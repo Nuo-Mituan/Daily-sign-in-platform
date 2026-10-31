@@ -4,16 +4,7 @@
  * endpoints keep their normal backend detail/generic fallback.
  */
 const ICON_ROUTE_RE = /\/modules\/icon(?:[?#]|$)/
-const ICON_STATUS_MESSAGES = Object.freeze({
-  415: '图标格式不支持，请使用 PNG / JPG / ICO / WebP',
-  413: '图标文件过大，请压缩后重试',
-})
-// Stable backend codes that mean "use the generic icon message"; concrete
-// details without these codes are shown directly (e.g. SVG deprecation).
-const ICON_GENERIC_CODES = new Set([
-  'icon_format_default',
-  'icon_size_default',
-])
+import { iconErrorMessage } from '../utils/iconErrorMessage.js'
 
 export function isIconRequest(error) {
   return ICON_ROUTE_RE.test(String(error?.config?.url || ''))
@@ -24,12 +15,12 @@ export function extractErrorMessage(error) {
   const data = error?.response?.data
   const detail = data?.detail
 
-  if (isIconRequest(error) && ICON_STATUS_MESSAGES[status]) {
-    if (ICON_GENERIC_CODES.has(data?.code)) {
-      return ICON_STATUS_MESSAGES[status]
-    }
-    const concrete = typeof detail === 'string' ? detail.trim() : ''
-    return concrete || ICON_STATUS_MESSAGES[status]
+  if (isIconRequest(error) && (status === 413 || status === 415)) {
+    return iconErrorMessage({
+      status,
+      code: data?.code,
+      detail,
+    })
   }
 
   if (typeof detail === 'string' && detail.trim()) return detail

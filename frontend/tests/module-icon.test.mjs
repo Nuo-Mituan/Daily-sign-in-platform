@@ -67,3 +67,17 @@ test('SVG extension is not supported and SVG data URI is rejected', () => {
   assert.equal(isSupportedIconExtension('icon.svg'), false)
   assert.equal(classifyModuleIcon({ icon: 'data:image/svg+xml;base64,AAAA', moduleKey: key }).type, 'fallback')
 })
+
+test('remote SVG URLs fall back and supported extensions remain remote', () => {
+  for (const icon of [
+    'https://example.com/icon.svg',
+    'https://example.com/icon.svg?v=2',
+    'http://example.com/icon.svg',
+  ]) {
+    assert.equal(classifyModuleIcon({ icon, moduleKey: key }).type, 'fallback')
+  }
+  assert.equal(
+    classifyModuleIcon({ icon: 'https://example.com/icon.png', moduleKey: key }).type,
+    'remote-url',
+  )
+})

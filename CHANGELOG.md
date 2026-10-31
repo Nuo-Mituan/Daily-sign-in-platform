@@ -24,6 +24,12 @@
   code is present.
 - `.cursorrules` and `.cursorrules.md` were merged into one authority; the latter is now a
   deprecated stub.
+- Icon endpoint 403 detail no longer echoes internal directory names or regex details;
+  status code remains 403 and full reason remains in logs.
+- Remote icon URLs with an `.svg` pathname (including query strings) are blocked at the
+  frontend before any network request.
+- Unified frontend icon error handling in one shared function used by both Axios and
+  ModuleIcon fetch paths (generic codes fall back to fixed copy; concrete details win).
 
 ### Migration
 

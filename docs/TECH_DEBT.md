@@ -36,6 +36,7 @@
 | TD-18 | P3 | 全项目 | 未接入 import-linter / mypy / ruff CI | 回归依赖人工 | CI 增加 import-linter、mypy（渐进）、ruff | 平台维护者 |
 | TD-19 | P3 | `services/execution.py` | 旧 `execution_logs.output` 字段保留 | 数据模型有历史包袱 | 下个大版本迁移后移除 | 平台维护者 |
 | TD-20 | P3 | `docs` | 系统/应用环形日志无独立 Web 查询页 | 运维排查需查 DB | 增加系统日志只读页 | 运维维护者 |
+| TD-21 | P3 | `frontend/src/utils/moduleIcon.js` | 远程图标仍允许 `http://` | 混合内容/远程跟踪；当前仅拦截远程 `.svg` | 目标 1.0.7：单独评估 HTTPS-only 与存量模块迁移说明 | 前端维护者 |
 
 ---
 

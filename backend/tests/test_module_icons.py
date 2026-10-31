@@ -2378,3 +2378,19 @@ async def test_missing_icon_404_body_has_no_code(
             assert response.json() == {"detail": "图标不存在"}
             assert "code" not in response.json()
             assert "etag" not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_illegal_icon_key_403_does_not_echo_directory() -> None:
+    await init_db()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get(
+            "/api/modules/icon",
+            params={"key": "__no_such_module__", "path": "icon.ico"},
+        )
+    assert response.status_code == 403
+    assert response.json() == {"detail": "模块标识不合法"}
+    assert "directory_name" not in response.text
+    assert "不合法：" not in response.text

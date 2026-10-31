@@ -21,10 +21,10 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   classifyModuleIcon,
-  iconHttpErrorMessage,
   isImageContentType,
   moduleIconUrl,
 } from '@/utils/moduleIcon'
+import { iconErrorMessage } from '@/utils/iconErrorMessage'
 import { looksLikeLocalPath } from '@/constants/moduleIcon'
 
 const props = defineProps({
@@ -60,7 +60,17 @@ async function loadLocalIcon(kind) {
       { credentials: 'include', cache: 'no-store' },
     )
     if (!response.ok) {
-      failureReason.value = iconHttpErrorMessage(response.status)
+      let payload = {}
+      try {
+        payload = await response.json()
+      } catch {
+        // Keep the status-based fallback when the error body is not JSON.
+      }
+      failureReason.value = iconErrorMessage({
+        status: response.status,
+        code: payload?.code,
+        detail: payload?.detail,
+      })
       throw new Error(`HTTP ${response.status}`)
     }
     const type = response.headers.get('content-type') || ''

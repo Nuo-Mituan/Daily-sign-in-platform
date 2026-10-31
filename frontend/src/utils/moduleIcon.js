@@ -20,7 +20,18 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
       ? { type: 'base64', src: value }
       : { type: 'fallback', src: '' }
   }
-  if (/^https?:\/\//i.test(value)) return { type: 'remote-url', src: value }
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value)
+      const hasExtension = /\.[A-Za-z0-9]+$/.test(parsed.pathname)
+      if (hasExtension && !isSupportedIconExtension(parsed.pathname)) {
+        return { type: 'fallback', src: '' }
+      }
+      return { type: 'remote-url', src: value }
+    } catch {
+      return { type: 'fallback', src: '' }
+    }
+  }
 
   // Public static paths are safe to use as-is. Other absolute paths are not
   // allowed to reach the module filesystem endpoint.
@@ -57,13 +68,6 @@ export function classifyModuleIcon({ icon = '', source = 'url', iconData = '', m
 
 export function isImageContentType(value = '') {
   return /^image\//i.test(String(value))
-}
-
-export function iconHttpErrorMessage(status) {
-  if (status === 415) return '图标格式不支持，请使用 PNG / JPG / ICO / WebP'
-  if (status === 413) return '图标文件过大，请压缩后重试'
-  if (status === 404) return '图标不存在，请检查模块图标路径'
-  return ''
 }
 
 export function moduleIconUrl(key, path = 'icon.ico') {
