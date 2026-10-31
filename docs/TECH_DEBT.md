@@ -36,7 +36,15 @@
 | TD-18 | P3 | 全项目 | 未接入 import-linter / mypy / ruff CI | 回归依赖人工 | CI 增加 import-linter、mypy（渐进）、ruff | 平台维护者 |
 | TD-19 | P3 | `services/execution.py` | 旧 `execution_logs.output` 字段保留 | 数据模型有历史包袱 | 下个大版本迁移后移除 | 平台维护者 |
 | TD-20 | P3 | `docs` | 系统/应用环形日志无独立 Web 查询页 | 运维排查需查 DB | 增加系统日志只读页 | 运维维护者 |
-| TD-21 | P3 | `frontend/src/utils/moduleIcon.js` | 远程图标仍允许 `http://` | 混合内容/远程跟踪；当前仅拦截远程 `.svg` | 目标 1.0.7：单独评估 HTTPS-only 与存量模块迁移说明 | 前端维护者 |
+| TD-21 | P1 | `frontend/src/utils/moduleIcon.js` | 远程图标仍允许 `http://` | 混合内容/远程跟踪；当前仅拦截远程 `.svg` | 目标 1.0.7：单独评估 HTTPS-only 与存量模块迁移说明 | 前端维护者 |
+| TD-22 | P1 | `frontend/src/utils/moduleIcon.js` + icon endpoint | 远程图标真实内容类型未校验；仅扩展名拦截 | 服务端可返回 SVG/GIF 伪装成 `.png`；前端无法判断 | 同源代理 + 魔数校验 | 前端/平台维护者 |
+| TD-23 | P1 | `Releases/` / CI | 发布清单与版本更新判定缺失；无 manifest/latest/上传脚本。**覆盖上传 ≠ 客户端版本更新判定**，当前无任何更新判定机制 | 客户端无法判断新版本，发布流程依赖人工 | 设计最小版本清单、checksum、CI 覆盖上传与更新检查 | 发布负责人 |
+| TD-24 | P2 | `frontend/src/components/ModuleIcon.vue` | 无组件级挂载测试；当前仅共享函数 + 源码 wiring 测试 | 组件回归可能漏测 | 引入 Vue Test Utils，覆盖 415/413/code/detail/fallback | 前端维护者 |
+| TD-25 | P2 | `pyproject.toml` / Docker / 包名 | 项目标识 B 类改名未执行（package/image/import/CI 工件） | 与旧名共存，影响长期品牌与依赖引用 | 1.0.7 设计迁移与别名兼容；Alembic/表名不改 | 平台维护者 |
+| TD-26 | P3 | `backend/app/services/push_delivery.py` / `bootstrap.py` | 全量 mypy 9 个既有错误 | 门禁例外长期存在 | 逐个修复并恢复全量 mypy 门禁 | 平台维护者 |
+| TD-27 | P3 | `Releases/<version>/frontend/dist` / CI | 前端产物须由构建产出并由 `--dist-source` 参数化注入 payload，禁止手工回填 | 本地 dist 可能过期或缺失 | 发布流水线强制构建并传入 `--dist-source`；本地不提交 dist | 发布负责人 |
+| TD-28 | P1 | `Releases/` | 发布可追溯性依赖 `Releases/MANIFEST`（无 git 历史；1.0.4/1.0.5 无提交基线） | 无法从提交回溯历史发布内容 | 以 `MANIFEST.json`/`MANIFEST.sha256` 为唯一审计凭据，发布前重新生成 | 平台维护者 |
+| TD-29 | P2 | `frontend/` | npm（`package-lock.json`）与 pnpm（`pnpm-lock.yaml`/pnpm store）混用 | lockfile 与安装器不一致，可能产生依赖漂移 | 统一 npm；保留 `package-lock.json`；清理 pnpm lock/tooling 前先评估 | 前端维护者 |
 
 ---
 
