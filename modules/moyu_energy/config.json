@@ -2,6 +2,7 @@
   "name": "摸鱼能量签到（多账号）",
   "description": "多账号示例模块：为每个账号独立执行一次模拟签到。演示 textarea / number / switch 参数、账号标签脱敏与相对导入；所有请求均为本地模拟。",
   "author": "Daily Check-in Platform",
+  "directory_name": "moyu_energy",
   "version": "1.2.0",
   "icon": "🐟",
   "default_start_time": "08:00",
