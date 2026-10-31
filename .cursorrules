@@ -5,7 +5,7 @@
 
 - 项目：自托管每日签到平台；后端 FastAPI + async SQLAlchemy + APScheduler + SQLite/PostgreSQL，
   前端 Vue 3 + Pinia + Axios + Element Plus；单管理员模型。
-- 当前版本锚点：`1.0.5`，以 `backend/app/config.py` 的 `app_version`、`pyproject.toml`、
+- 当前版本锚点：`1.0.6`，以 `backend/app/config.py` 的 `app_version`、`pyproject.toml`、
   `frontend/package.json`、`Dockerfile` / `Dockerfile.dev` 的实际值为准；修改版本时必须同步检查
   这些位置与 `CHANGELOG.md`。
 - 模块物理目录以 `directory_name` / `physical_directory` 为准，API `key` 不等于磁盘目录。
@@ -46,7 +46,7 @@
 - 修改前确认影响范围，检查对应索引文档；遵循 dev-sop.md 的闭环流程，不跳步、不过度设计。
 - 涉及加密/调度/推送时，严格遵守 constraints.md 的规格定义。
 - **版本校验**：若用户提到的版本号、CHANGELOG 最新条目，或 `pyproject.toml` /
-  `frontend/package.json` / `config.py` 的版本与本文档声明的 `1.0.5` 不一致，立即提醒用户
+  `frontend/package.json` / `config.py` 的版本与本文档声明的 `1.0.6` 不一致，立即提醒用户
   文档可能过时，并询问是否先执行文档同步，再继续开发。
 - 不修改与本任务无关的前端样式、路由或业务逻辑，除非明确要求并补充测试。
 - 修改 `frontend/src/components/ModuleIcon.vue` 的已验证安全路径逻辑时，必须同步补充前端测试。
@@ -59,3 +59,5 @@
   ≤64KB、解码尺寸 ≤1024×1024，扩展名必须与真实文件头一致。
 - SVG 已于本版本停止支持：`.svg` 返回 415，禁止新增 SVG 解析/净化/栅格化代码；
   若未来恢复，必须采用栅格化 + 成熟净化库，禁止原样返回 `image/svg+xml`。
+- 图标错误可用稳定 code：`icon_format_default` / `icon_size_default`；无 code 时前端展示具体 detail。
+  新增 code 必须保持 detail 与状态码不变，并同步 api-contracts 测试。
