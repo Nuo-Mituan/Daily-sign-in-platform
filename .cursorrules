@@ -60,4 +60,5 @@
 - SVG 已于本版本停止支持：`.svg` 返回 415，禁止新增 SVG 解析/净化/栅格化代码；
   若未来恢复，必须采用栅格化 + 成熟净化库，禁止原样返回 `image/svg+xml`。
 - 图标错误可用稳定 code：`icon_format_default` / `icon_size_default`；无 code 时前端展示具体 detail。
-  新增 code 必须保持 detail 与状态码不变，并同步 api-contracts 测试。
+  新增 code 必须保持 detail 与状态码不变，且 default code 不得与具体迁移 detail 共存，
+  并同步 api-contracts 测试。
