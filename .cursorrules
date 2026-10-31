@@ -62,3 +62,5 @@
 - 图标错误可用稳定 code：`icon_format_default` / `icon_size_default`；无 code 时前端展示具体 detail。
   新增 code 必须保持 detail 与状态码不变，且 default code 不得与具体迁移 detail 共存，
   并同步 api-contracts 测试。
+- 免鉴权图标接口不得在错误 detail 中回显物理目录名或内部路径校验细节；完整原因只写日志。
+- 图标错误文案判定必须走单一共享函数 `frontend/src/utils/iconErrorMessage.js`，禁止组件内另写 status→文案映射。
