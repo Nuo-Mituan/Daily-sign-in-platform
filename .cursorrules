@@ -17,8 +17,11 @@
 2. **分层**：Service 层不得新增 FastAPI Request/Response 依赖；现有例外仅限
    `services/auth_sessions.py`（Response）与 `services/module_upload.py`（UploadFile），重构时移除。
 3. **加密**：敏感数据必须使用 `crypto.py` v2（AES-256-GCM + HKDF-SHA256）。
-4. **日志**：统一走 `ring_log` 环形日志；禁止直接写日志文件；`execution_logs.output` 已废弃，
-   正常路径不得写入，仅 ring_log 写失败时允许紧急 fallback。
+4. **日志**：
+   - Router/Service 应用级运行日志：使用模块级 `logging.getLogger(__name__)`；禁止自行创建
+     `FileHandler` 或绕过根 logger sink 落盘。沿用同文件既有 logger 模式即为合规。
+   - 业务/审计/需持久化回放的记录：使用 `ring_log`；`execution_logs.output` 已废弃，
+     正常路径不得写入，仅 ring_log 写失败时允许紧急 fallback。
 5. **推送**：遵循 `push_drivers/` 注册表模式；自定义驱动不是安全沙箱。
 6. **调度**：仅支持 5 种合法周期 daily/weekly/monthly_15/monthly/yearly + 子选项联动。
 7. **数据**：既有库 schema 变更通过 `migrations.py` 的 ALTER TABLE；`main.py#patch_schema`
