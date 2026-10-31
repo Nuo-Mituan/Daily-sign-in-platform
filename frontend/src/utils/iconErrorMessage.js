@@ -14,6 +14,9 @@ export const ICON_GENERIC_CODES = new Set([
 export function iconErrorMessage({ status, code, detail } = {}) {
   // 404 is only used by ModuleIcon's fetch path; Axios guards 413/415 only.
   if (ICON_GENERIC_CODES.has(code)) {
+    // Defensive only: current default codes always map to 415/413 and hit
+    // ICON_STATUS_MESSAGES; this fallback protects future default codes
+    // paired with an unknown status from returning an empty string.
     return (
       ICON_STATUS_MESSAGES[status] ||
       (status ? `图标加载失败（HTTP ${status}）` : '图标加载失败')
