@@ -80,7 +80,7 @@
 
 | code | 状态码 | 出现条件 | 前端行为 |
 |---|---|---|---|
-| `icon_format_default` | 415 | 默认格式错误（后缀/魔数不匹配、解码失败） | 回退固定 PNG/JPG/ICO/WebP 文案 |
+| `icon_format_default` | 415 | 默认格式错误（后缀/魔数不匹配、解码失败） | 回退固定 PNG/JPG/ICO/WebP 文案。`.svg` 是后缀不支持的特例：返回 415 但**不携带 code**，走具体迁移 detail「SVG 图标已停止支持，请改用 PNG 格式」。 |
 | `icon_size_default` | 413 | 文件超限、像素超限、DecompressionBomb | 回退固定“文件过大”文案 |
 | 无 `code` | 415 | 例如 SVG 已停止支持的具体迁移提示 | 直接展示后端 `detail` |
 

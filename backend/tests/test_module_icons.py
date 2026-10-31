@@ -2356,3 +2356,25 @@ def test_evict_event_type_logs_desync_but_continues(caplog) -> None:
     assert "desync" not in main._db_log_last_emit
     assert "desync" not in main._db_log_suppressed_count
     assert "desync" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_missing_icon_404_body_has_no_code(
+    tmp_path, monkeypatch
+) -> None:
+    await init_db()
+    monkeypatch.setattr(settings, "modules_dir", tmp_path)
+    (tmp_path / "existing-module").mkdir()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        for params in (
+            {"key": "missing-module", "path": "icon.ico"},
+            {"key": "existing-module", "path": "missing-icon.png"},
+        ):
+            response = await client.get("/api/modules/icon", params=params)
+            assert response.status_code == 404
+            assert response.headers["content-type"].startswith("application/json")
+            assert response.json() == {"detail": "图标不存在"}
+            assert "code" not in response.json()
+            assert "etag" not in response.headers
